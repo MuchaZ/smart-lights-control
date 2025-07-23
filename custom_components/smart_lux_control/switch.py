@@ -20,15 +20,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Smart Lux Control switches."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    entities = [
-        SmartModeSwitch(coordinator),
-        AdaptiveLearningSwitch(coordinator),
-        AutoControlSwitch(coordinator),
-    ]
-    
-    async_add_entities(entities)
+    try:
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        
+        entities = [
+            SmartModeSwitch(coordinator),
+            AdaptiveLearningSwitch(coordinator),
+            AutoControlSwitch(coordinator),
+        ]
+        
+        async_add_entities(entities)
+        _LOGGER.info("Successfully set up %d switches for %s", len(entities), entry.title)
+        
+    except Exception as err:
+        _LOGGER.error("Error setting up switches for %s: %s", entry.title, err)
+        raise
 
 
 class SmartLuxBaseSwitch(SwitchEntity):

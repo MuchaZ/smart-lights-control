@@ -21,13 +21,19 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Smart Lux Control sensors."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    entities = []
-    for sensor_type in SENSOR_TYPES:
-        entities.append(SmartLuxSensor(coordinator, sensor_type))
-    
-    async_add_entities(entities)
+    try:
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        
+        entities = []
+        for sensor_type in SENSOR_TYPES:
+            entities.append(SmartLuxSensor(coordinator, sensor_type))
+        
+        async_add_entities(entities)
+        _LOGGER.info("Successfully set up %d sensors for %s", len(entities), entry.title)
+        
+    except Exception as err:
+        _LOGGER.error("Error setting up sensors for %s: %s", entry.title, err)
+        raise
 
 
 class SmartLuxSensor(SensorEntity):
