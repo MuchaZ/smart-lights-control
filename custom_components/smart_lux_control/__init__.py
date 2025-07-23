@@ -20,6 +20,19 @@ from .const import (
     CONF_LUX_SENSOR,
     CONF_MOTION_SENSOR,
     CONF_HOME_MODE_SELECT,
+    CONF_LUX_NORMAL_DAY,
+    CONF_LUX_NORMAL_NIGHT,
+    CONF_LUX_MODE_NOC,
+    CONF_LUX_MODE_IMPREZA,
+    CONF_LUX_MODE_RELAKS,
+    CONF_LUX_MODE_FILM,
+    CONF_LUX_MODE_SPRZATANIE,
+    CONF_LUX_MODE_DZIECKO_SPI,
+    CONF_KEEP_ON_MINUTES,
+    CONF_BUFFER_MINUTES,
+    CONF_DEVIATION_MARGIN,
+    CONF_CHECK_INTERVAL,
+    CONF_AUTO_CONTROL_ENABLED,
     DEFAULT_MIN_REGRESSION_QUALITY,
     DEFAULT_MAX_BRIGHTNESS_CHANGE,
     DEFAULT_DEVIATION_MARGIN,
@@ -29,14 +42,13 @@ from .const import (
     SERVICE_CLEAR_SAMPLES,
     SERVICE_ADD_SAMPLE,
     SERVICE_ADAPTIVE_LEARNING,
+    STORAGE_VERSION,
     EVENT_REGRESSION_UPDATED,
     EVENT_SMART_MODE_CHANGED,
     EVENT_SAMPLE_ADDED,
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-STORAGE_VERSION = 1
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -160,9 +172,14 @@ class SmartLuxCoordinator:
         self.room_name = entry.data[CONF_ROOM_NAME]
         
         # Entity IDs - support multiple lights
-        self.light_entities = entry.data[CONF_LIGHT_ENTITY]
-        if not isinstance(self.light_entities, list):
-            self.light_entities = [self.light_entities]
+        light_entity_data = entry.data[CONF_LIGHT_ENTITY]
+        if isinstance(light_entity_data, str):
+            # Single entity or comma-separated entities
+            self.light_entities = [e.strip() for e in light_entity_data.split(',') if e.strip()]
+        elif isinstance(light_entity_data, list):
+            self.light_entities = light_entity_data
+        else:
+            self.light_entities = [str(light_entity_data)]
         self.lux_sensor = entry.data[CONF_LUX_SENSOR]
         self.motion_sensor = entry.data[CONF_MOTION_SENSOR]
         self.home_mode_select = entry.data.get(CONF_HOME_MODE_SELECT)
@@ -616,8 +633,20 @@ class SmartLuxCoordinator:
             sunset = sun_state.attributes.get("next_setting")
             
             if sunrise and sunset:
-                sunrise_ts = dt_util.parse_datetime(sunrise).timestamp() - 86400  # Previous sunrise
-                sunset_ts = dt_util.parse_datetime(sunset).timestamp()
+                try:
+                    sunrise_dt = dt_util.parse_datetime(sunrise)
+                    sunset_dt = dt_util.parse_datetime(sunset)
+                    if sunrise_dt and sunset_dt:
+                        sunrise_ts = sunrise_dt.timestamp() - 86400  # Previous sunrise
+                        sunset_ts = sunset_dt.timestamp()
+                    else:
+                        raise ValueError("Could not parse datetime")
+                except (ValueError, AttributeError):
+                    # Fallback to simple hour-based logic
+                    if 6 <= now.hour <= 22:
+                        return float(self.lux_settings["normal_day"])
+                    else:
+                        return float(self.lux_settings["normal_night"])
                 
                 # Calculate with buffer
                 buffer_seconds = self.buffer_minutes * 60

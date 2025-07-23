@@ -2,39 +2,63 @@
   "config": {
     "step": {
       "user": {
-        "title": "Smart Lux Control - Konfiguracja podstawowa ({step})",
-        "description": "{step_name}",
+        "title": "Smart Lux Control - Podstawowa konfiguracja (1/3)",
+        "description": "Skonfiguruj podstawowe encje do sterowania światłem w tym pomieszczeniu",
         "data": {
-          "room_name": "Nazwa pokoju",
-          "light_entity": "Lampy (można wybrać kilka)",
-          "lux_sensor": "Czujnik światła (lux/illuminance)",
-          "motion_sensor": "Czujnik ruchu",
-          "home_mode_select": "Tryb domu (opcjonalnie)",
-          "auto_control_enabled": "Włącz automatyczne sterowanie"
+          "room_name": "Nazwa pokoju (np. salon, kuchnia, sypialnia)",
+          "light_entity": "Lampy do sterowania (entity_id lub kilka oddzielonych przecinkami)",
+          "lux_sensor": "Czujnik natężenia światła (sensor.xxx z device_class: illuminance)",
+          "motion_sensor": "Czujnik ruchu (binary_sensor.xxx z device_class: motion)",
+          "home_mode_select": "Tryby domu - opcjonalne (input_select.xxx z trybami)",
+          "auto_control_enabled": "Automatyczne sterowanie światłem włączone"
+        },
+        "data_description": {
+          "room_name": "Podaj unikalną nazwę pokoju bez spacji i polskich znaków (np. salon, kuchnia_dolna)",
+          "light_entity": "Wpisz entity_id lamp: light.salon_glowna lub kilka: light.salon_1,light.salon_2,light.salon_3",
+          "lux_sensor": "Wybierz czujnik światła który mierzy rzeczywiste oświetlenie w pomieszczeniu",
+          "motion_sensor": "Wybierz czujnik ruchu który będzie włączał automatycznie światło",
+          "home_mode_select": "Jeśli masz tryby domu (noc, impreza, film) - wybierz tutaj, inaczej zostaw puste",
+          "auto_control_enabled": "Czy automatycznie włączać/wyłączać światło na podstawie ruchu i czasu"
         }
       },
       "lux_settings": {
-        "title": "Smart Lux Control - Ustawienia lux ({step})",
-        "description": "{step_name} - {room_name}",
+        "title": "Smart Lux Control - Poziomy docelowego oświetlenia (2/3)",
+        "description": "Ustaw docelowe poziomy lux dla różnych trybów w pomieszczeniu: {room_name}",
         "data": {
-          "lux_normal_day": "Normal - dzień (lx)",
-          "lux_normal_night": "Normal - noc (lx)",
-          "lux_mode_noc": "Tryb noc (lx)",
-          "lux_mode_impreza": "Tryb impreza (lx)",
-          "lux_mode_relaks": "Tryb relaks (lx)",
-          "lux_mode_film": "Tryb film (lx)",
-          "lux_mode_sprzatanie": "Tryb sprzątanie (lx)",
-          "lux_mode_dziecko_spi": "Tryb dziecko śpi (lx)"
+          "lux_normal_day": "Normalne oświetlenie - dzień [lx]",
+          "lux_normal_night": "Normalne oświetlenie - noc [lx]",
+          "lux_mode_noc": "Tryb NOC - minimalne światło [lx]",
+          "lux_mode_impreza": "Tryb IMPREZA - jasne światło [lx]",
+          "lux_mode_relaks": "Tryb RELAKS - przytulne światło [lx]",
+          "lux_mode_film": "Tryb FILM - ciemne dla TV [lx]",
+          "lux_mode_sprzatanie": "Tryb SPRZĄTANIE - maksymalne światło [lx]",
+          "lux_mode_dziecko_spi": "Tryb DZIECKO ŚPI - ledwo widoczne [lx]"
+        },
+        "data_description": {
+          "lux_normal_day": "Komfortowe oświetlenie w ciągu dnia (300-500 lx)",
+          "lux_normal_night": "Spokojne oświetlenie wieczorem (100-200 lx)",
+          "lux_mode_noc": "Minimalne światło do poruszania się nocą (5-15 lx)",
+          "lux_mode_impreza": "Jasne światło na przyjęcia i spotkania (400-600 lx)",
+          "lux_mode_relaks": "Przytulne światło do odpoczynku (80-150 lx)",
+          "lux_mode_film": "Ciemne światło do oglądania TV (30-80 lx)",
+          "lux_mode_sprzatanie": "Maksymalne światło do prac domowych (500-800 lx)",
+          "lux_mode_dziecko_spi": "Ledwo widoczne światło gdy dziecko śpi (3-10 lx)"
         }
       },
       "timing_settings": {
-        "title": "Smart Lux Control - Ustawienia czasowe ({step})",
-        "description": "{step_name} - {room_name}",
+        "title": "Smart Lux Control - Ustawienia czasowe i precyzji (3/3)",
+        "description": "Dostosuj zachowanie automatyki dla pomieszczenia: {room_name}",
         "data": {
-          "keep_on_minutes": "Czas świecenia po ruchu (minuty)",
-          "buffer_minutes": "Bufor przejścia dzień/noc (minuty)",
-          "deviation_margin": "Tolerancja różnicy lux (lx)",
-          "check_interval": "Częstotliwość sprawdzania (sekundy)"
+          "keep_on_minutes": "Ile minut świecić po ostatnim ruchu",
+          "buffer_minutes": "Czas płynnego przejścia wschód/zachód słońca [min]",
+          "deviation_margin": "Tolerancja odchyłki od docelowego lux [lx]",
+          "check_interval": "Co ile sekund sprawdzać i dostosowywać światło"
+        },
+        "data_description": {
+          "keep_on_minutes": "Po wykryciu ruchu światło będzie świecić przez ten czas. Typowo 3-10 minut.",
+          "buffer_minutes": "Czas płynnego przejścia między trybem dziennym a nocnym. 20-60 minut.",
+          "deviation_margin": "Jeśli różnica między docelowym a rzeczywistym lux jest mniejsza, nie zmieniaj jasności. Typowo 10-20 lx.",
+          "check_interval": "Jak często system sprawdza warunki i dostosowuje światło. Typowo 20-60 sekund."
         }
       }
     },

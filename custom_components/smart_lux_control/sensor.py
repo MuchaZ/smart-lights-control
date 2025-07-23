@@ -170,9 +170,10 @@ class SmartLuxSensor(SensorEntity):
             })
         
         elif self._sensor_type == "motion_timer":
+            motion_state = self._coordinator.hass.states.get(self._coordinator.motion_sensor)
             attrs.update({
                 "keep_on_minutes": self._coordinator.keep_on_minutes,
-                "motion_currently_detected": self._coordinator.hass.states.get(self._coordinator.motion_sensor).state == "on" if self._coordinator.hass.states.get(self._coordinator.motion_sensor) else False,
+                "motion_currently_detected": motion_state.state == "on" if motion_state else False,
                 "last_motion_time": self._coordinator.last_motion_time.isoformat() if self._coordinator.last_motion_time else None,
             })
         
