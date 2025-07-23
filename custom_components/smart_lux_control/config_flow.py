@@ -38,16 +38,27 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_ROOM_NAME, default="salon"): str,
     vol.Required(CONF_LIGHT_ENTITY): selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="light", multiple=True)
+        selector.EntitySelectorConfig(
+            domain="light", 
+            multiple=True
+        )
     ),
     vol.Required(CONF_LUX_SENSOR): selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor", device_class="illuminance")
+        selector.EntitySelectorConfig(
+            domain="sensor", 
+            device_class="illuminance"
+        )
     ),
     vol.Required(CONF_MOTION_SENSOR): selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="binary_sensor", device_class="motion")
+        selector.EntitySelectorConfig(
+            domain="binary_sensor", 
+            device_class="motion"
+        )
     ),
     vol.Optional(CONF_HOME_MODE_SELECT): selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="input_select")
+        selector.EntitySelectorConfig(
+            domain="input_select"
+        )
     ),
     vol.Optional(CONF_AUTO_CONTROL_ENABLED, default=True): bool,
 })
