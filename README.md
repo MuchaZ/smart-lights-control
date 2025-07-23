@@ -50,7 +50,7 @@ Docelowe: 300lx, Obecne: 200lx
 # W folderze config Home Assistant:
 cd /config
 git clone https://github.com/MuchaZ/smart-lights-control.git
-cp -r smart-lights-control/smart_lux_control custom_components/
+cp -r smart-lights-control/custom_components/smart_lux_control custom_components/
 ```
 
 ## ⚡ Konfiguracja
