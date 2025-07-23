@@ -690,6 +690,10 @@ class SmartLuxCoordinator:
     @property
     def predicted_lux(self) -> Optional[float]:
         """Get predicted lux for current brightness."""
+        # If no regression model yet, return None
+        if self.regression_quality < 0.1 or self.regression_a == 0:
+            return None
+            
         # Get average brightness from all controlled lights
         total_brightness = 0
         light_count = 0
@@ -702,6 +706,7 @@ class SmartLuxCoordinator:
                     total_brightness += brightness
                     light_count += 1
         
+        # If no lights are on, can't predict lux from lights
         if light_count == 0:
             return None
         

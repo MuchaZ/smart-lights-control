@@ -75,7 +75,16 @@ class SmartLuxSensor(SensorEntity):
         
         elif self._sensor_type == "predicted_lux":
             predicted = self._coordinator.predicted_lux
-            return round(predicted, 1) if predicted is not None else None
+            if predicted is not None:
+                return round(predicted, 1)
+            # If can't predict, show current sensor reading instead
+            lux_state = self._coordinator.hass.states.get(self._coordinator.lux_sensor)
+            if lux_state and lux_state.state not in ("unknown", "unavailable"):
+                try:
+                    return round(float(lux_state.state), 1)
+                except ValueError:
+                    pass
+            return None
         
         elif self._sensor_type == "average_error":
             return self._calculate_average_error()
@@ -133,6 +142,20 @@ class SmartLuxSensor(SensorEntity):
                 "regression_a": round(self._coordinator.regression_a, 4),
                 "regression_b": round(self._coordinator.regression_b, 1),
                 "quality_status": self._get_quality_status(),
+            })
+        
+        elif self._sensor_type == "predicted_lux":
+            # Additional info for predicted lux sensor
+            lights_on = sum(1 for light_entity in self._coordinator.light_entities 
+                          if self._coordinator.hass.states.get(light_entity) 
+                          and self._coordinator.hass.states.get(light_entity).state == "on")
+            
+            attrs.update({
+                "lights_on_count": lights_on,
+                "total_lights": len(self._coordinator.light_entities),
+                "regression_ready": self._coordinator.regression_quality >= 0.1,
+                "learning_phase": self._coordinator.sample_count < 10,
+                "fallback_to_sensor": self._coordinator.predicted_lux is None,
             })
         
         elif self._sensor_type == "smart_mode_status":

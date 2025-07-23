@@ -76,8 +76,8 @@ SENSOR_TYPES = {
         "device_class": None,
     },
     "predicted_lux": {
-        "name": "Predicted Lux",
-        "unit": "lx",
+        "name": "Current Lux",
+        "unit": "lx", 
         "icon": "mdi:brightness-6",
         "device_class": "illuminance",
     },

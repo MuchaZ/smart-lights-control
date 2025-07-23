@@ -189,18 +189,129 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
+        self.options = {}
 
     async def async_step_init(
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """Manage the options."""
+        """Show options menu."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["lux_settings", "timing_settings", "advanced_settings"],
+        )
+
+    async def async_step_lux_settings(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Edit lux level settings."""
+        if user_input is not None:
+            # Update config entry data
+            new_data = {**self.config_entry.data}
+            new_data.update(user_input)
+            
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+            # Reload the integration to apply new settings
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_create_entry(title="", data={})
+
+        # Current values from config entry
+        lux_schema = vol.Schema({
+            vol.Optional(
+                CONF_LUX_NORMAL_DAY,
+                default=self.config_entry.data.get(CONF_LUX_NORMAL_DAY, 400),
+            ): vol.All(vol.Coerce(int), vol.Range(min=50, max=2000)),
+            vol.Optional(
+                CONF_LUX_NORMAL_NIGHT,
+                default=self.config_entry.data.get(CONF_LUX_NORMAL_NIGHT, 150),
+            ): vol.All(vol.Coerce(int), vol.Range(min=10, max=1000)),
+            vol.Optional(
+                CONF_LUX_MODE_NOC,
+                default=self.config_entry.data.get(CONF_LUX_MODE_NOC, 10),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+            vol.Optional(
+                CONF_LUX_MODE_IMPREZA,
+                default=self.config_entry.data.get(CONF_LUX_MODE_IMPREZA, 500),
+            ): vol.All(vol.Coerce(int), vol.Range(min=100, max=2000)),
+            vol.Optional(
+                CONF_LUX_MODE_RELAKS,
+                default=self.config_entry.data.get(CONF_LUX_MODE_RELAKS, 120),
+            ): vol.All(vol.Coerce(int), vol.Range(min=20, max=1000)),
+            vol.Optional(
+                CONF_LUX_MODE_FILM,
+                default=self.config_entry.data.get(CONF_LUX_MODE_FILM, 60),
+            ): vol.All(vol.Coerce(int), vol.Range(min=5, max=500)),
+            vol.Optional(
+                CONF_LUX_MODE_SPRZATANIE,
+                default=self.config_entry.data.get(CONF_LUX_MODE_SPRZATANIE, 600),
+            ): vol.All(vol.Coerce(int), vol.Range(min=200, max=2000)),
+            vol.Optional(
+                CONF_LUX_MODE_DZIECKO_SPI,
+                default=self.config_entry.data.get(CONF_LUX_MODE_DZIECKO_SPI, 8),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+        })
+
+        return self.async_show_form(
+            step_id="lux_settings",
+            data_schema=lux_schema,
+            description_placeholders={"room_name": self.config_entry.data[CONF_ROOM_NAME]}
+        )
+
+    async def async_step_timing_settings(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Edit timing and tolerance settings."""
+        if user_input is not None:
+            # Update config entry data
+            new_data = {**self.config_entry.data}
+            new_data.update(user_input)
+            
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+            return self.async_create_entry(title="", data={})
+
+        timing_schema = vol.Schema({
+            vol.Optional(
+                CONF_KEEP_ON_MINUTES,
+                default=self.config_entry.data.get(CONF_KEEP_ON_MINUTES, 5),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+            vol.Optional(
+                CONF_BUFFER_MINUTES,
+                default=self.config_entry.data.get(CONF_BUFFER_MINUTES, 30),
+            ): vol.All(vol.Coerce(int), vol.Range(min=0, max=90)),
+            vol.Optional(
+                CONF_DEVIATION_MARGIN,
+                default=self.config_entry.data.get(CONF_DEVIATION_MARGIN, 15),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+            vol.Optional(
+                CONF_CHECK_INTERVAL,
+                default=self.config_entry.data.get(CONF_CHECK_INTERVAL, 30),
+            ): vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
+            vol.Optional(
+                CONF_AUTO_CONTROL_ENABLED,
+                default=self.config_entry.data.get(CONF_AUTO_CONTROL_ENABLED, True),
+            ): bool,
+        })
+
+        return self.async_show_form(
+            step_id="timing_settings", 
+            data_schema=timing_schema,
+            description_placeholders={"room_name": self.config_entry.data[CONF_ROOM_NAME]}
+        )
+
+    async def async_step_advanced_settings(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Edit advanced regression settings."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Get current coordinator
+        # Get current coordinator for advanced settings
         coordinator = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
         
-        options_schema = vol.Schema({
+        advanced_schema = vol.Schema({
             vol.Optional(
                 "min_regression_quality",
                 default=coordinator.min_regression_quality if coordinator else 0.5,
@@ -213,10 +324,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 "learning_rate",
                 default=coordinator.learning_rate if coordinator else 0.1,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
-            vol.Optional(
-                CONF_AUTO_CONTROL_ENABLED,
-                default=self.config_entry.data.get(CONF_AUTO_CONTROL_ENABLED, True),
-            ): bool,
         })
 
-        return self.async_show_form(step_id="init", data_schema=options_schema) 
+        return self.async_show_form(
+            step_id="advanced_settings",
+            data_schema=advanced_schema
+        ) 

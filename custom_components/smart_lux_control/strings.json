@@ -25,14 +25,14 @@
         "title": "Smart Lux Control - Poziomy docelowego oświetlenia (2/3)",
         "description": "Ustaw docelowe poziomy lux dla różnych trybów w pomieszczeniu: {room_name}",
         "data": {
-          "lux_normal_day": "Normalne oświetlenie - dzień [lx]",
-          "lux_normal_night": "Normalne oświetlenie - noc [lx]",
-          "lux_mode_noc": "Tryb NOC - minimalne światło [lx]",
-          "lux_mode_impreza": "Tryb IMPREZA - jasne światło [lx]",
-          "lux_mode_relaks": "Tryb RELAKS - przytulne światło [lx]",
-          "lux_mode_film": "Tryb FILM - ciemne dla TV [lx]",
-          "lux_mode_sprzatanie": "Tryb SPRZĄTANIE - maksymalne światło [lx]",
-          "lux_mode_dziecko_spi": "Tryb DZIECKO ŚPI - ledwo widoczne [lx]"
+          "lux_normal_day": "Dzień: komfortowe oświetlenie (300-500 lx)",
+          "lux_normal_night": "Noc: spokojne światło (100-200 lx)", 
+          "lux_mode_noc": "NOC: minimalne do poruszania (5-15 lx)",
+          "lux_mode_impreza": "IMPREZA: jasne na przyjęcia (400-600 lx)",
+          "lux_mode_relaks": "RELAKS: przytulne odpoczywanie (80-150 lx)",
+          "lux_mode_film": "FILM: ciemne do oglądania TV (30-80 lx)",
+          "lux_mode_sprzatanie": "SPRZĄTANIE: maksymalne do prac (500-800 lx)",
+          "lux_mode_dziecko_spi": "DZIECKO ŚPI: ledwo widoczne (3-10 lx)"
         },
         "data_description": {
           "lux_normal_day": "Komfortowe oświetlenie w ciągu dnia (300-500 lx)",
@@ -49,10 +49,10 @@
         "title": "Smart Lux Control - Ustawienia czasowe i precyzji (3/3)",
         "description": "Dostosuj zachowanie automatyki dla pomieszczenia: {room_name}",
         "data": {
-          "keep_on_minutes": "Ile minut świecić po ostatnim ruchu",
-          "buffer_minutes": "Czas płynnego przejścia wschód/zachód słońca [min]",
-          "deviation_margin": "Tolerancja odchyłki od docelowego lux [lx]",
-          "check_interval": "Co ile sekund sprawdzać i dostosowywać światło"
+          "keep_on_minutes": "Czas świecenia po ruchu: typowo 3-10 minut",
+          "buffer_minutes": "Bufor wschód/zachód słońca: typowo 20-60 minut", 
+          "deviation_margin": "Tolerancja różnicy lux: typowo 10-20 lx",
+          "check_interval": "Częstotliwość sprawdzania: typowo 20-60 sekund"
         },
         "data_description": {
           "keep_on_minutes": "Po wykryciu ruchu światło będzie świecić przez ten czas. Typowo 3-10 minut.",
@@ -70,13 +70,46 @@
   "options": {
     "step": {
       "init": {
-        "title": "Smart Lux Control Options",
-        "description": "Configure advanced settings",
+        "title": "Opcje Smart Lux Control",
+        "description": "Wybierz kategorię ustawień do edycji",
+        "menu_options": {
+          "lux_settings": "🌟 Poziomy docelowego oświetlenia",
+          "timing_settings": "⏰ Ustawienia czasowe i automatyki", 
+          "advanced_settings": "🔧 Zaawansowane opcje regresji"
+        }
+      },
+      "lux_settings": {
+        "title": "Edycja poziomów docelowego oświetlenia",
+        "description": "Dostosuj poziomy lux dla pomieszczenia: {room_name}",
         "data": {
-          "min_regression_quality": "Minimum Regression Quality (R²)",
-          "max_brightness_change": "Maximum Brightness Change",
-          "deviation_margin": "Deviation Margin (lx)",
-          "learning_rate": "Learning Rate"
+          "lux_normal_day": "Dzień: komfortowe oświetlenie (300-500 lx)",
+          "lux_normal_night": "Noc: spokojne światło (100-200 lx)", 
+          "lux_mode_noc": "NOC: minimalne do poruszania (5-15 lx)",
+          "lux_mode_impreza": "IMPREZA: jasne na przyjęcia (400-600 lx)",
+          "lux_mode_relaks": "RELAKS: przytulne odpoczywanie (80-150 lx)",
+          "lux_mode_film": "FILM: ciemne do oglądania TV (30-80 lx)",
+          "lux_mode_sprzatanie": "SPRZĄTANIE: maksymalne do prac (500-800 lx)",
+          "lux_mode_dziecko_spi": "DZIECKO ŚPI: ledwo widoczne (3-10 lx)"
+        }
+      },
+      "timing_settings": {
+        "title": "Edycja ustawień czasowych", 
+        "description": "Dostosuj timing i zachowanie automatyki: {room_name}",
+        "data": {
+          "keep_on_minutes": "Czas świecenia po ruchu: typowo 3-10 minut",
+          "buffer_minutes": "Bufor wschód/zachód słońca: typowo 20-60 minut", 
+          "deviation_margin": "Tolerancja różnicy lux: typowo 10-20 lx",
+          "check_interval": "Częstotliwość sprawdzania: typowo 20-60 sekund",
+          "auto_control_enabled": "Automatyczne sterowanie włączone"
+        }
+      },
+      "advanced_settings": {
+        "title": "Zaawansowane opcje regresji",
+        "description": "Opcje dla zaawansowanych użytkowników - ostrożnie!",
+        "data": {
+          "min_regression_quality": "Minimalna jakość regresji (R²): 0.1-1.0",
+          "max_brightness_change": "Maks zmiana jasności na raz: 10-100",
+          "learning_rate": "Szybkość adaptacyjnego uczenia: 0.01-1.0"
         }
       }
     }
