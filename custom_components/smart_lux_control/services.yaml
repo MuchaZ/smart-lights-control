@@ -89,3 +89,14 @@ calculate_target_brightness:
           min: 1
           max: 255
           step: 1 
+
+force_light_refresh:
+  name: Force Light Entity Refresh
+  description: Force Home Assistant to refresh light entity states using homeassistant.update_entity service.
+  fields:
+    room_name:
+      name: Room Name
+      description: Name of the room to force refresh.
+      required: true
+      selector:
+        text:
