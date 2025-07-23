@@ -125,6 +125,27 @@ class SmartLuxSensor(SensorEntity):
             else:
                 return "No Motion"
         
+        elif self._sensor_type == "lights_status":
+            lights_on = 0
+            lights_total = len(self._coordinator.light_entities)
+            avg_brightness = 0
+            
+            for light_entity in self._coordinator.light_entities:
+                light_state = self._coordinator.hass.states.get(light_entity)
+                if light_state and light_state.state == "on":
+                    lights_on += 1
+                    brightness = light_state.attributes.get("brightness", 255)
+                    avg_brightness += brightness
+            
+            if lights_on == 0:
+                return "All Off"
+            elif lights_on == lights_total:
+                avg_brightness = int(avg_brightness / lights_on)
+                return f"All On ({avg_brightness}/255)"
+            else:
+                avg_brightness = int(avg_brightness / lights_on) if lights_on > 0 else 0
+                return f"{lights_on}/{lights_total} On ({avg_brightness}/255)"
+        
         return None
 
     def _calculate_average_error(self) -> Optional[float]:
@@ -224,6 +245,35 @@ class SmartLuxSensor(SensorEntity):
                 "auto_control_enabled": self._coordinator.auto_control_enabled,
                 "last_motion_trigger": self._coordinator.last_motion_time.isoformat() if self._coordinator.last_motion_time else None,
                 "time_since_motion": round((now - self._coordinator.last_motion_time).total_seconds() / 60, 1) if self._coordinator.last_motion_time else None,
+            })
+        
+        elif self._sensor_type == "lights_status":
+            lights_info = []
+            
+            for light_entity in self._coordinator.light_entities:
+                light_state = self._coordinator.hass.states.get(light_entity)
+                if light_state:
+                    brightness = light_state.attributes.get("brightness", 255) if light_state.state == "on" else 0
+                    lights_info.append({
+                        "entity_id": light_entity,
+                        "state": light_state.state,
+                        "brightness": brightness,
+                        "friendly_name": light_state.attributes.get("friendly_name", light_entity)
+                    })
+                else:
+                    lights_info.append({
+                        "entity_id": light_entity,
+                        "state": "unavailable",
+                        "brightness": 0,
+                        "friendly_name": light_entity
+                    })
+            
+            attrs.update({
+                "controlled_by_automation": self._coordinator.lights_controlled_by_automation,
+                "light_entities": self._coordinator.light_entities,
+                "lights_detail": lights_info,
+                "auto_control_enabled": self._coordinator.auto_control_enabled,
+                "last_action": self._coordinator.last_automation_action,
             })
         
         return attrs

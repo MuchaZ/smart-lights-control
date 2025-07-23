@@ -117,6 +117,12 @@ SENSOR_TYPES = {
         "icon": "mdi:motion-sensor",
         "device_class": None,
     },
+    "lights_status": {
+        "name": "Controlled Lights Status",
+        "unit": None,
+        "icon": "mdi:lightbulb-group",
+        "device_class": None,
+    },
 }
 
 # Events

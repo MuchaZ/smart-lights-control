@@ -146,12 +146,58 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             brightness = coordinator.calculate_target_brightness(target_lux, current_brightness)
             return {"brightness": brightness}
     
+    async def test_light_control_service(call: ServiceCall) -> None:
+        """Service to test light control with specific brightness."""
+        room_name = call.data.get("room_name")
+        brightness = call.data.get("brightness")
+        
+        if not all([room_name, brightness is not None]):
+            _LOGGER.error("Room name and brightness are required for test_light_control service")
+            return
+            
+        coordinator = _get_coordinator_by_room(hass, room_name)
+        if coordinator:
+            _LOGGER.info("🧪 Testing light control for %s with brightness %d", room_name, brightness)
+            success = await coordinator._async_set_brightness(brightness)
+            if success:
+                _LOGGER.info("✅ Test successful - lights responded to brightness %d", brightness)
+            else:
+                _LOGGER.error("❌ Test failed - lights did not respond properly")
+    
+    async def sync_light_states_service(call: ServiceCall) -> None:
+        """Service to force sync light states to fix desync issues."""
+        room_name = call.data.get("room_name")
+        
+        if not room_name:
+            _LOGGER.error("Room name is required for sync_light_states service")
+            return
+            
+        coordinator = _get_coordinator_by_room(hass, room_name)
+        if coordinator:
+            _LOGGER.info("🔄 Syncing light states for %s", room_name)
+            
+            # Log current state of all lights
+            for light_entity in coordinator.light_entities:
+                light_state = hass.states.get(light_entity)
+                if light_state:
+                    brightness = light_state.attributes.get("brightness", "N/A")
+                    _LOGGER.info(
+                        "Light %s: state=%s, brightness=%s", 
+                        light_entity, light_state.state, brightness
+                    )
+                else:
+                    _LOGGER.warning("Light %s: state unavailable", light_entity)
+            
+            _LOGGER.info("✅ Light states sync completed for %s", room_name)
+    
     # Register services
     hass.services.async_register(DOMAIN, SERVICE_CALCULATE_REGRESSION, calculate_regression_service)
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_SAMPLES, clear_samples_service)
     hass.services.async_register(DOMAIN, SERVICE_ADD_SAMPLE, add_sample_service)
     hass.services.async_register(DOMAIN, SERVICE_ADAPTIVE_LEARNING, adaptive_learning_service)
     hass.services.async_register(DOMAIN, "calculate_target_brightness", calculate_target_brightness_service)
+    hass.services.async_register(DOMAIN, SERVICE_TEST_LIGHT_CONTROL, test_light_control_service)
+    hass.services.async_register(DOMAIN, SERVICE_SYNC_LIGHT_STATES, sync_light_states_service)
 
 
 def _get_coordinator_by_room(hass: HomeAssistant, room_name: str) -> Optional["SmartLuxCoordinator"]:
@@ -841,9 +887,16 @@ class SmartLuxCoordinator:
                 target_brightness = max(current_brightness - 30, 1)
             mode = "fallback"
         
-        # Apply brightness change
-        await self._async_set_brightness(target_brightness)
-        self.lights_controlled_by_automation = True
+        # Apply brightness change with verification
+        brightness_change_successful = await self._async_set_brightness(target_brightness)
+        
+        if brightness_change_successful:
+            self.lights_controlled_by_automation = True
+            _LOGGER.info("✅ Brightness change successful")
+        else:
+            _LOGGER.error("❌ Brightness change failed - lights may not be responding")
+            # Don't set automation flag if lights didn't respond
+            return
         
         # Update predicted lux for sensors
         self.current_predicted_lux = self.regression_a * target_brightness + self.regression_b
@@ -870,18 +923,73 @@ class SmartLuxCoordinator:
                 blocking=True
             )
     
-    async def _async_set_brightness(self, brightness: int) -> None:
-        """Set brightness for controlled lights."""
+    async def _async_set_brightness(self, brightness: int) -> bool:
+        """Set brightness for controlled lights. Returns True if successful."""
+        success_count = 0
+        
         for light_entity in self.light_entities:
-            await self.hass.services.async_call(
-                "light", "turn_on",
-                {
-                    "entity_id": light_entity,
-                    "brightness": brightness,
-                    "transition": 2
-                },
-                blocking=True
-            )
+            try:
+                # Get current state before change
+                current_state = self.hass.states.get(light_entity)
+                if not current_state:
+                    _LOGGER.warning("Light entity %s not found", light_entity)
+                    continue
+                
+                _LOGGER.debug(
+                    "Setting brightness %d for %s (current: %s)", 
+                    brightness, light_entity, current_state.state
+                )
+                
+                # Call light service
+                await self.hass.services.async_call(
+                    "light", "turn_on",
+                    {
+                        "entity_id": light_entity,
+                        "brightness": brightness,
+                        "transition": 2
+                    },
+                    blocking=True
+                )
+                
+                # Wait for state to update
+                await asyncio.sleep(0.5)
+                
+                # Verify the change
+                new_state = self.hass.states.get(light_entity)
+                if new_state and new_state.state == "on":
+                    new_brightness = new_state.attributes.get("brightness", 255)
+                    brightness_diff = abs(new_brightness - brightness)
+                    
+                    if brightness_diff <= 10:  # Allow small differences
+                        success_count += 1
+                        _LOGGER.debug(
+                            "✅ Light %s brightness set successfully: %d → %d", 
+                            light_entity, brightness, new_brightness
+                        )
+                    else:
+                        _LOGGER.warning(
+                            "⚠️ Light %s brightness mismatch: requested %d, got %d", 
+                            light_entity, brightness, new_brightness
+                        )
+                else:
+                    _LOGGER.warning(
+                        "❌ Light %s failed to turn on or respond (state: %s)", 
+                        light_entity, new_state.state if new_state else "unknown"
+                    )
+                    
+            except Exception as err:
+                _LOGGER.error(
+                    "Error setting brightness for %s: %s", 
+                    light_entity, err
+                )
+        
+        success_rate = success_count / len(self.light_entities) if self.light_entities else 0
+        _LOGGER.info(
+            "Brightness change result: %d/%d lights successful (%.0f%%)", 
+            success_count, len(self.light_entities), success_rate * 100
+        )
+        
+        return success_count > 0  # At least one light responded
     
     async def _async_start_automation_task(self) -> None:
         """Start the automation background task."""
