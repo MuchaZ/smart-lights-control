@@ -379,6 +379,14 @@ class SmartLuxCoordinator:
                 self.hass, [self.motion_sensor], self._async_motion_changed
             )
         )
+        
+        # Listen for home mode changes - TARGET LUX UPDATE
+        if self.home_mode_select:
+            self._unsub_listeners.append(
+                async_track_state_change_event(
+                    self.hass, [self.home_mode_select], self._async_home_mode_changed
+                )
+            )
     
     async def _async_light_changed(self, event) -> None:
         """Handle light state changes."""
@@ -436,6 +444,34 @@ class SmartLuxCoordinator:
                 "🚶 Motion stopped in %s - countdown started (%d min)", 
                 self.room_name, self.keep_on_minutes
             )
+    
+    async def _async_home_mode_changed(self, event) -> None:
+        """Handle home mode changes - UPDATE TARGET LUX."""
+        if not self.auto_control_enabled:
+            return
+            
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        
+        if not new_state or not old_state:
+            return
+            
+        # Home mode changed - update target and trigger control if needed
+        if new_state.state != old_state.state:
+            old_target = self.lux_settings.get(old_state.state, 400)
+            new_target = self.lux_settings.get(new_state.state, 400)
+            
+            _LOGGER.info(
+                "🏠 Home mode changed in %s: %s→%s (target: %.0f→%.0f lux)", 
+                self.room_name, old_state.state, new_state.state, old_target, new_target
+            )
+            
+            # Update current target and trigger immediate control if lights should be on
+            self.current_target_lux = new_target
+            
+            if self.should_lights_be_on():
+                _LOGGER.info("Triggering immediate light adjustment for new target")
+                await self.async_control_lights()
     
     async def async_add_sample(self, brightness: float, lux: float) -> None:
         """Add a sample to the dataset."""
@@ -836,7 +872,12 @@ class SmartLuxCoordinator:
                 total_brightness += brightness
                 light_count += 1
         
-        return int(total_brightness / light_count) if light_count > 0 else 255
+        if light_count > 0:
+            return int(total_brightness / light_count)
+        else:
+            # No lights are on - return 1 so system knows to turn them on!
+            # (not 255 which would make system think lights are already bright)
+            return 1
     
     async def async_control_lights(self) -> None:
         """Main automation logic - control lights based on conditions."""
@@ -869,9 +910,16 @@ class SmartLuxCoordinator:
         
         deviation = target_lux - current_lux
         
+        # Log current situation for debugging
+        _LOGGER.debug(
+            "Light control check [%s]: target_lux=%.1f, current_lux=%.1f, deviation=%.1f, margin=%d",
+            self.room_name, target_lux, current_lux, deviation, self.deviation_margin
+        )
+        
         # Check if adjustment is needed
         if abs(deviation) <= self.deviation_margin:
             self.last_automation_action = "within_tolerance"
+            _LOGGER.debug("Within tolerance - no adjustment needed")
             return
         
         # Calculate target brightness
