@@ -54,6 +54,8 @@ SERVICE_CLEAR_SAMPLES = "clear_samples"
 SERVICE_ADD_SAMPLE = "add_sample"
 SERVICE_ADAPTIVE_LEARNING = "adaptive_learning"
 SERVICE_CALCULATE_TARGET_BRIGHTNESS = "calculate_target_brightness"
+SERVICE_TEST_LIGHT_CONTROL = "test_light_control"
+SERVICE_SYNC_LIGHT_STATES = "sync_light_states"
 
 # Sensor types
 SENSOR_TYPES = {
