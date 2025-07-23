@@ -1,0 +1,7 @@
+{
+  "name": "Smart Lights Control",
+  "hacs": "1.6.0",
+  "domains": ["smart_lux_control"],
+  "iot_class": "Local Polling",
+  "homeassistant": "2023.1.0"
+} 

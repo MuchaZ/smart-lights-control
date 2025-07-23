@@ -1,0 +1,353 @@
+# Rozszerzona konfiguracja Home Assistant dla SMART systemu regresji jasności
+# Zawiera wszystkie encje potrzebne dla inteligentnego sterowania z adaptacyjnym uczeniem
+
+# Input text do przechowywania próbek i wyników regresji
+input_text:
+  # Przykład dla pokoju "garderoba_master" - zmień na swoją nazwę
+  brightness_lux_samples_garderoba_master:
+    name: "Próbki brightness→lux Garderoba Master"
+    max: 3000  # Zwiększone dla więcej próbek
+    initial: ""
+
+  brightness_regression_garderoba_master:
+    name: "Regresja brightness→lux Garderoba Master"
+    max: 300  # Więcej miejsca na dodatkowe dane
+    initial: "a:1;b:0;r2:0;n:0;adaptive:false"
+
+  last_sample_garderoba_master:
+    name: "Ostatnia próbka Garderoba Master"
+    max: 50
+    initial: ""
+
+  # NOWE: Historia adaptacyjnego uczenia
+  adaptive_history_garderoba_master:
+    name: "Historia adaptacji Garderoba Master"
+    max: 1000
+    initial: ""
+
+# Input numbers do przechowywania współczynników regresji
+input_number:
+  # Współczynniki regresji
+  light_regression_a_garderoba_master:
+    name: "Współczynnik A - Garderoba Master"
+    min: -100
+    max: 100
+    step: 0.0001  # Większa precyzja
+    initial: 1
+
+  light_regression_b_garderoba_master:
+    name: "Współczynnik B - Garderoba Master"
+    min: -1000
+    max: 1000
+    step: 0.01  # Większa precyzja
+    initial: 0
+
+  regression_quality_garderoba_master:
+    name: "Jakość regresji R² - Garderoba Master"
+    min: 0
+    max: 1
+    step: 0.001
+    initial: 0
+
+  # NOWE: Parametry adaptacyjnego uczenia
+  adaptive_learning_rate_garderoba_master:
+    name: "Szybkość uczenia - Garderoba Master"
+    min: 0.01
+    max: 1.0
+    step: 0.01
+    initial: 0.1
+
+  adaptive_error_threshold_garderoba_master:
+    name: "Próg błędu dla adaptacji - Garderoba Master"
+    min: 5
+    max: 100
+    step: 1
+    initial: 20
+
+  # Monitorowanie wydajności
+  average_prediction_error_garderoba_master:
+    name: "Średni błąd przewidywań - Garderoba Master"
+    min: 0
+    max: 500
+    step: 0.1
+    initial: 0
+
+  max_prediction_error_garderoba_master:
+    name: "Maksymalny błąd przewidywań - Garderoba Master"
+    min: 0
+    max: 1000
+    step: 0.1
+    initial: 0
+
+# Input datetime
+input_datetime:
+  last_sample_time_garderoba_master:
+    name: "Czas ostatniej próbki - Garderoba Master"
+    has_date: true
+    has_time: true
+
+  last_adaptive_update_garderoba_master:
+    name: "Ostatnia adaptacyjna aktualizacja - Garderoba Master"
+    has_date: true
+    has_time: true
+
+# Input boolean dla funkcji smart
+input_boolean:
+  smart_mode_enabled_garderoba_master:
+    name: "Smart Mode włączony - Garderoba Master"
+    initial: true
+
+  adaptive_learning_enabled_garderoba_master:
+    name: "Adaptacyjne uczenie włączone - Garderoba Master"
+    initial: true
+
+  daylight_compensation_garderoba_master:
+    name: "Kompensacja światła dziennego - Garderoba Master"
+    initial: true
+
+# Input select dla trybu domu (jeśli nie masz)
+input_select:
+  home_mode:
+    name: "Tryb domu"
+    options:
+      - normal
+      - noc
+      - impreza
+      - relaks
+      - film
+      - sprzatanie
+      - dziecko_spi
+    initial: normal
+
+  # NOWE: Agresywność adaptacji
+  adaptive_mode_garderoba_master:
+    name: "Tryb adaptacji - Garderoba Master"
+    options:
+      - conservative  # Powolne zmiany
+      - normal       # Standardowe tempo
+      - aggressive   # Szybkie dostosowanie
+    initial: normal
+
+# Python scripts
+python_script:
+  # Te pliki muszą być w <config>/python_scripts/
+  # calculate_brightness_regression.py (ulepszona wersja)
+  # learn_brightness_lux.py (ulepszona wersja)
+  # adaptive_learning.py (NOWY!)
+
+# Sensory do monitorowania i diagnostyki
+sensor:
+  - platform: template
+    sensors:
+      # Jakość regresji z kolorowym wskaźnikiem
+      regression_quality_garderoba_master:
+        friendly_name: "Jakość regresji - Garderoba Master"
+        value_template: >
+          {% set regression_data = states('input_text.brightness_regression_garderoba_master') %}
+          {% if 'r2:' in regression_data %}
+            {% set r2_part = regression_data.split('r2:')[1].split(';')[0] %}
+            {{ r2_part | float | round(3) }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "R²"
+        icon_template: >
+          {% set r2 = states('sensor.regression_quality_garderoba_master') | float %}
+          {% if r2 > 0.8 %}
+            mdi:chart-line
+          {% elif r2 > 0.5 %}
+            mdi:chart-line-variant
+          {% else %}
+            mdi:alert-circle
+          {% endif %}
+        attribute_templates:
+          status: >
+            {% set r2 = states('sensor.regression_quality_garderoba_master') | float %}
+            {% if r2 > 0.8 %}
+              Doskonała
+            {% elif r2 > 0.6 %}
+              Dobra
+            {% elif r2 > 0.4 %}
+              Średnia
+            {% else %}
+              Słaba
+            {% endif %}
+
+      # Przewidywane lux na podstawie obecnej jasności
+      predicted_lux_garderoba_master:
+        friendly_name: "Przewidywane lux - Garderoba Master"
+        value_template: >
+          {% set brightness = state_attr('light.garderoba_master', 'brightness') | int(0) %}
+          {% set a = states('input_number.light_regression_a_garderoba_master') | float(1) %}
+          {% set b = states('input_number.light_regression_b_garderoba_master') | float(0) %}
+          {{ (a * brightness + b) | round(1) }}
+        unit_of_measurement: "lx"
+        icon_template: mdi:brightness-6
+
+      # NOWE: Status smart mode
+      smart_mode_status_garderoba_master:
+        friendly_name: "Status Smart Mode - Garderoba Master"
+        value_template: >
+          {% set quality = states('input_number.regression_quality_garderoba_master') | float(0) %}
+          {% set enabled = states('input_boolean.smart_mode_enabled_garderoba_master') %}
+          {% if enabled == 'on' and quality >= 0.5 %}
+            Smart Active
+          {% elif enabled == 'on' and quality < 0.5 %}
+            Fallback Mode
+          {% else %}
+            Disabled
+          {% endif %}
+        icon_template: >
+          {% set status = states('sensor.smart_mode_status_garderoba_master') %}
+          {% if status == 'Smart Active' %}
+            mdi:brain
+          {% elif status == 'Fallback Mode' %}
+            mdi:cog-outline
+          {% else %}
+            mdi:power-off
+          {% endif %}
+
+      # Liczba próbek w systemie
+      sample_count_garderoba_master:
+        friendly_name: "Liczba próbek - Garderoba Master"
+        value_template: >
+          {% set samples = states('input_text.brightness_lux_samples_garderoba_master') %}
+          {% if samples %}
+            {{ samples.split(';') | length }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "próbek"
+        icon_template: mdi:database
+
+      # NOWE: Błąd przewidywań
+      prediction_accuracy_garderoba_master:
+        friendly_name: "Dokładność przewidywań - Garderoba Master"
+        value_template: >
+          {% set avg_error = states('input_number.average_prediction_error_garderoba_master') | float(0) %}
+          {% if avg_error > 0 %}
+            {{ (100 - avg_error) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "%"
+        icon_template: mdi:target
+
+# Automatyzacje dla smart systemu
+automation:
+  # Regularne przeliczanie regresji
+  - alias: "Przelicz regresję co godzinę (Smart)"
+    trigger:
+      - platform: time_pattern
+        minutes: 0
+    condition:
+      - condition: template
+        value_template: >
+          {% set samples = states('input_text.brightness_lux_samples_garderoba_master') %}
+          {{ samples != '' and samples.split(';') | length >= 10 }}
+    action:
+      - service: python_script.calculate_brightness_regression
+        data:
+          room_id: "garderoba_master"
+
+  # NOWE: Adaptacyjne uczenie co 2 godziny
+  - alias: "Adaptacyjne uczenie - Garderoba Master"
+    trigger:
+      - platform: time_pattern
+        hours: "/2"
+    condition:
+      - condition: state
+        entity_id: input_boolean.adaptive_learning_enabled_garderoba_master
+        state: "on"
+      - condition: template
+        value_template: >
+          {% set samples = states('input_text.brightness_lux_samples_garderoba_master') %}
+          {{ samples != '' and samples.split(';') | length >= 20 }}
+    action:
+      - service: python_script.adaptive_learning
+        data:
+          room_id: "garderoba_master"
+          learning_rate: "{{ states('input_number.adaptive_learning_rate_garderoba_master') | float(0.1) }}"
+          min_samples_for_update: 15
+
+  # Powiadomienie o niskiej jakości regresji
+  - alias: "Ostrzeżenie o słabej regresji (Smart)"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.regression_quality_garderoba_master
+        below: 0.4
+        for:
+          minutes: 5
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: "⚠️ Słaba jakość regresji"
+          message: >
+            Regresja dla garderoby master ma niską jakość (R²={{ states('sensor.regression_quality_garderoba_master') }}). 
+            Sprawdź pozycjonowanie czujnika lux lub dodaj więcej próbek.
+          notification_id: "regression_quality_warning"
+
+  # NOWE: Powiadomienie o udanej adaptacji
+  - alias: "Powiadomienie o adaptacji modelu"
+    trigger:
+      - platform: state
+        entity_id: input_datetime.last_adaptive_update_garderoba_master
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state != trigger.from_state.state }}
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: "🧠 Model zaktualizowany"
+          message: >
+            System adaptacyjnego uczenia poprawił model regresji dla garderoby master.
+            Nowa jakość: {{ states('sensor.regression_quality_garderoba_master') }}
+          notification_id: "adaptive_update"
+
+  # Automatyczne przełączanie na fallback mode
+  - alias: "Auto fallback gdy słaba jakość"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.regression_quality_garderoba_master
+        below: 0.3
+    action:
+      - service: logbook.log
+        data:
+          name: "Smart Lux System"
+          message: "Automatyczne przełączenie na fallback mode z powodu słabej jakości regresji"
+
+# Dashboard - przykładowe karty
+# (Dodaj to do swojego dashboard.yaml lub w UI)
+lovelace:
+  dashboards:
+    smart-lighting:
+      mode: yaml
+      filename: smart_lighting_dashboard.yaml
+      title: "Smart Oświetlenie"
+      icon: mdi:lightbulb-on
+      show_in_sidebar: true
+
+# Dodatkowe pomocnicze sensory
+sensor:
+  # Czas od ostatniej adaptacji
+  - platform: template
+    sensors:
+      time_since_last_adaptation_garderoba_master:
+        friendly_name: "Czas od ostatniej adaptacji"
+        value_template: >
+          {% if states('input_datetime.last_adaptive_update_garderoba_master') != 'unknown' %}
+            {% set last_update = as_timestamp(states('input_datetime.last_adaptive_update_garderoba_master')) %}
+            {% set now = as_timestamp(now()) %}
+            {% set diff_hours = ((now - last_update) / 3600) | round(1) %}
+            {% if diff_hours < 1 %}
+              {{ ((now - last_update) / 60) | round(0) }} min temu
+            {% elif diff_hours < 24 %}
+              {{ diff_hours }} h temu
+            {% else %}
+              {{ (diff_hours / 24) | round(1) }} dni temu
+            {% endif %}
+          {% else %}
+            Nigdy
+          {% endif %}
+        icon_template: mdi:clock-outline 

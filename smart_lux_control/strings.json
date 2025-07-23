@@ -1,0 +1,85 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart Lux Control Setup",
+        "description": "Configure smart lighting control for a room",
+        "data": {
+          "room_name": "Room Name",
+          "light_entity": "Light Entity",
+          "lux_sensor": "Lux Sensor",
+          "motion_sensor": "Motion Sensor",
+          "home_mode_select": "Home Mode Select (Optional)"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found",
+      "room_already_configured": "Room already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart Lux Control Options",
+        "description": "Configure advanced settings",
+        "data": {
+          "min_regression_quality": "Minimum Regression Quality (R²)",
+          "max_brightness_change": "Maximum Brightness Change",
+          "deviation_margin": "Deviation Margin (lx)",
+          "learning_rate": "Learning Rate"
+        }
+      }
+    }
+  },
+  "services": {
+    "calculate_regression": {
+      "name": "Calculate Regression",
+      "description": "Calculate linear regression for a room",
+      "fields": {
+        "room_name": {
+          "name": "Room Name",
+          "description": "Name of the room to calculate regression for"
+        }
+      }
+    },
+    "clear_samples": {
+      "name": "Clear Samples",
+      "description": "Clear all samples for a room",
+      "fields": {
+        "room_name": {
+          "name": "Room Name",
+          "description": "Name of the room to clear samples for"
+        }
+      }
+    },
+    "add_sample": {
+      "name": "Add Sample",
+      "description": "Manually add a brightness/lux sample",
+      "fields": {
+        "room_name": {
+          "name": "Room Name",
+          "description": "Name of the room"
+        },
+        "brightness": {
+          "name": "Brightness",
+          "description": "Brightness value (0-255)"
+        },
+        "lux": {
+          "name": "Lux",
+          "description": "Lux value"
+        }
+      }
+    },
+    "adaptive_learning": {
+      "name": "Adaptive Learning",
+      "description": "Run adaptive learning to improve the model",
+      "fields": {
+        "room_name": {
+          "name": "Room Name",
+          "description": "Name of the room"
+        }
+      }
+    }
+  }
+} 

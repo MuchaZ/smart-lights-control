@@ -1,0 +1,61 @@
+calculate_regression:
+  name: Calculate Regression
+  description: Calculate linear regression for a room
+  fields:
+    room_name:
+      name: Room Name
+      description: Name of the room to calculate regression for
+      required: true
+      selector:
+        text:
+
+clear_samples:
+  name: Clear Samples
+  description: Clear all samples for a room
+  fields:
+    room_name:
+      name: Room Name
+      description: Name of the room to clear samples for
+      required: true
+      selector:
+        text:
+
+add_sample:
+  name: Add Sample
+  description: Manually add a brightness/lux sample
+  fields:
+    room_name:
+      name: Room Name
+      description: Name of the room
+      required: true
+      selector:
+        text:
+    brightness:
+      name: Brightness
+      description: Brightness value (0-255)
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 255
+          step: 1
+    lux:
+      name: Lux
+      description: Lux value
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 0.1
+
+adaptive_learning:
+  name: Adaptive Learning
+  description: Run adaptive learning to improve the model
+  fields:
+    room_name:
+      name: Room Name
+      description: Name of the room
+      required: true
+      selector:
+        text: 

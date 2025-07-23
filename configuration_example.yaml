@@ -1,0 +1,137 @@
+# Przykładowa konfiguracja Home Assistant dla systemu regresji jasności
+# Dodaj to do swojego configuration.yaml
+
+# Input text do przechowywania próbek i wyników regresji
+input_text:
+  # Przykład dla pokoju "garderoba_master"
+  brightness_lux_samples_garderoba_master:
+    name: "Próbki brightness→lux Garderoba Master"
+    max: 2000
+    initial: ""
+
+  brightness_regression_garderoba_master:
+    name: "Regresja brightness→lux Garderoba Master"
+    max: 200
+    initial: "a:0;b:0;r2:0;n:0"
+
+  last_sample_garderoba_master:
+    name: "Ostatnia próbka Garderoba Master"
+    max: 50
+    initial: ""
+
+# Input numbers do przechowywania współczynników regresji
+input_number:
+  # Współczynniki regresji dla pokoju "garderoba_master"
+  light_regression_a_garderoba_master:
+    name: "Współczynnik A - Garderoba Master"
+    min: -1000
+    max: 1000
+    step: 0.001
+    initial: 1
+
+  light_regression_b_garderoba_master:
+    name: "Współczynnik B - Garderoba Master"
+    min: -1000
+    max: 1000
+    step: 0.1
+    initial: 0
+
+  regression_quality_garderoba_master:
+    name: "Jakość regresji R² - Garderoba Master"
+    min: 0
+    max: 1
+    step: 0.001
+    initial: 0
+
+# Input datetime do śledzenia czasu ostatniej próbki
+input_datetime:
+  last_sample_time_garderoba_master:
+    name: "Czas ostatniej próbki - Garderoba Master"
+    has_date: true
+    has_time: true
+
+# Input select dla trybu domu (jeśli nie masz)
+input_select:
+  home_mode:
+    name: "Tryb domu"
+    options:
+      - normal
+      - noc
+      - impreza
+      - relaks
+      - film
+      - sprzatanie
+      - dziecko_spi
+    initial: normal
+
+# Python scripts
+python_script:
+  # Te pliki muszą być w <config>/python_scripts/
+  # calculate_brightness_regression.py
+  # learn_brightness_lux.py
+
+# Przykładowe sensory do monitorowania jakości regresji
+sensor:
+  - platform: template
+    sensors:
+      regression_quality_garderoba_master:
+        friendly_name: "Jakość regresji - Garderoba Master"
+        value_template: >
+          {% set regression_data = states('input_text.brightness_regression_garderoba_master') %}
+          {% if 'r2:' in regression_data %}
+            {% set r2_part = regression_data.split('r2:')[1].split(';')[0] %}
+            {{ r2_part | float | round(3) }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "R²"
+        icon_template: >
+          {% set r2 = states('sensor.regression_quality_garderoba_master') | float %}
+          {% if r2 > 0.8 %}
+            mdi:chart-line
+          {% elif r2 > 0.5 %}
+            mdi:chart-line-variant
+          {% else %}
+            mdi:alert-circle
+          {% endif %}
+
+      predicted_lux_garderoba_master:
+        friendly_name: "Przewidywane lux - Garderoba Master"
+        value_template: >
+          {% set brightness = state_attr('light.garderoba_master', 'brightness') | int(0) %}
+          {% set a = states('input_number.light_regression_a_garderoba_master') | float(1) %}
+          {% set b = states('input_number.light_regression_b_garderoba_master') | float(0) %}
+          {{ (a * brightness + b) | round(1) }}
+        unit_of_measurement: "lx"
+        icon_template: mdi:brightness-6
+
+# Przykładowe automatyzacje
+automation:
+  # Automatyzacja do regularnego przeliczania regresji
+  - alias: "Przelicz regresję co godzinę"
+    trigger:
+      - platform: time_pattern
+        minutes: 0
+    condition:
+      - condition: template
+        value_template: >
+          {% set samples = states('input_text.brightness_lux_samples_garderoba_master') %}
+          {{ samples != '' and samples.split(';') | length >= 10 }}
+    action:
+      - service: python_script.calculate_brightness_regression
+        data:
+          room_id: "garderoba_master"
+
+  # Powiadomienie o niskiej jakości regresji
+  - alias: "Ostrzeżenie o słabej regresji"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.regression_quality_garderoba_master
+        below: 0.4
+    action:
+      - service: notify.mobile_app_twoj_telefon  # Zmień na swoje urządzenie
+        data:
+          title: "Uwaga: Słaba jakość regresji"
+          message: >
+            Regresja dla garderoby master ma niską jakość (R²={{ states('sensor.regression_quality_garderoba_master') }}). 
+            Sprawdź pozycjonowanie czujnika lux. 

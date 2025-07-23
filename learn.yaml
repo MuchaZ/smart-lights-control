@@ -1,0 +1,148 @@
+blueprint:
+  name: Zbieranie danych brightness → lux (Ulepszone)
+  description: >
+    Automatyzacja pomocnicza. Zbiera pary brightness → lux do input_text,
+    na potrzeby uczenia regresji dla inteligentnego sterowania światłem.
+    Ulepszona wersja z filtrowaniem błędnych danych i lepszym logowaniem.
+
+  domain: automation
+
+  input:
+    light_target:
+      name: Lampy
+      selector:
+        entity:
+          domain: light
+
+    sensor_lux:
+      name: Czujnik lux
+      selector:
+        entity:
+          domain: sensor
+
+    room_id:
+      name: Nazwa pokoju (np. garderoba_master)
+      selector:
+        text:
+
+    min_brightness_change:
+      name: Minimalna zmiana jasności do zapisania
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+
+    collection_cooldown:
+      name: Czas oczekiwania między próbkami (sekundy)
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+
+trigger:
+  - platform: state
+    entity_id: !input light_target
+    attribute: brightness
+    for:
+      seconds: 2  # Poczekaj żeby światło się ustabilizowało
+
+  - platform: state
+    entity_id: !input sensor_lux
+    for:
+      seconds: 1  # Krótsze opóźnienie dla czujnika
+
+variables:
+  lux_entity: !input sensor_lux
+  light_entity: !input light_target
+  room_id: !input room_id
+  min_change: !input min_brightness_change
+  cooldown: !input collection_cooldown
+  
+  lux_val: "{{ states(lux_entity) | float(0) }}"
+  brightness_val: "{{ state_attr(light_entity, 'brightness') | int(0) }}"
+  
+  # Sprawdź czy to rozsądne wartości
+  lux_valid: "{{ lux_val > 0 and lux_val < 10000 }}"
+  brightness_valid: "{{ brightness_val > 0 and brightness_val <= 255 }}"
+  
+  sample_line: "{{ brightness_val }}:{{ lux_val }}"
+  storage_entity: "input_text.brightness_lux_samples_{{ room_id }}"
+  
+  # Sprawdź ostatnią próbkę żeby uniknąć duplikatów
+  last_sample_entity: "input_text.last_sample_{{ room_id }}"
+  last_sample: "{{ states(last_sample_entity) }}"
+  last_sample_time_entity: "input_datetime.last_sample_time_{{ room_id }}"
+  
+  # Sprawdź czy minęło wystarczająco czasu od ostatniej próbki
+  time_since_last: >
+    {% set last_time = states(last_sample_time_entity) %}
+    {% if last_time not in ['unknown', 'unavailable', ''] %}
+      {{ (now().timestamp() - as_timestamp(last_time)) }}
+    {% else %}
+      {{ cooldown + 1 }}
+    {% endif %}
+
+condition:
+  - alias: "Tylko gdy światło jest włączone i wartości są prawidłowe"
+    condition: and
+    conditions:
+      - condition: template
+        value_template: "{{ is_state(light_entity, 'on') }}"
+      - condition: template
+        value_template: "{{ brightness_valid }}"
+      - condition: template
+        value_template: "{{ lux_valid }}"
+      - condition: template
+        value_template: "{{ sample_line != last_sample }}"
+      - condition: template
+        value_template: "{{ time_since_last > cooldown }}"
+
+action:
+  - alias: "Zapisz próbkę do bufora"
+    service: input_text.set_value
+    data:
+      entity_id: "{{ storage_entity }}"
+      value: >
+        {% set previous = states(storage_entity) %}
+        {% if previous in ['unknown', 'unavailable', ''] %}
+          {% set samples = [] %}
+        {% else %}
+          {% set samples = previous.split(';') if previous else [] %}
+        {% endif %}
+        {% set updated = (samples + [sample_line])[-100:] %}
+        {{ updated | join(';') }}
+
+  - alias: "Zapisz ostatnią próbkę"
+    service: input_text.set_value
+    data:
+      entity_id: "{{ last_sample_entity }}"
+      value: "{{ sample_line }}"
+
+  - alias: "Zapisz czas ostatniej próbki"
+    service: input_datetime.set_datetime
+    data:
+      entity_id: "{{ last_sample_time_entity }}"
+      datetime: "{{ now().isoformat() }}"
+
+  - alias: "Uruchom przeliczenie regresji po zebraniu próbek"
+    condition: template
+    value_template: >
+      {% set current_samples = states(storage_entity).split(';') | length %}
+      {{ current_samples % 5 == 0 and current_samples >= 10 }}
+    service: python_script.calculate_brightness_regression
+    data:
+      room_id: "{{ room_id }}"
+
+  - alias: "Loguj postęp zbierania danych"
+    service: logbook.log
+    data:
+      name: "Brightness Learning"
+      message: >
+        Dodano próbkę {{ sample_line }} dla {{ room_id }}. 
+        Łącznie próbek: {{ states(storage_entity).split(';') | length }}
+
+mode: single
