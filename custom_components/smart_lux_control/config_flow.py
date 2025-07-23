@@ -8,10 +8,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
-try:
-    from homeassistant.helpers import selector
-except ImportError:
-    selector = None
+from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
@@ -37,13 +34,21 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Step 1: Basic Configuration
+# Step 1: Basic Configuration  
 STEP_USER_DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_ROOM_NAME, default="salon"): str,
-    vol.Required(CONF_LIGHT_ENTITY, default="light.salon"): str,
-    vol.Required(CONF_LUX_SENSOR, default="sensor.lux"): str,  
-    vol.Required(CONF_MOTION_SENSOR, default="binary_sensor.motion"): str,
-    vol.Optional(CONF_HOME_MODE_SELECT, default=""): str,
+    vol.Required(CONF_LIGHT_ENTITY): selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="light", multiple=True)
+    ),
+    vol.Required(CONF_LUX_SENSOR): selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor", device_class="illuminance")
+    ),
+    vol.Required(CONF_MOTION_SENSOR): selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="binary_sensor", device_class="motion")
+    ),
+    vol.Optional(CONF_HOME_MODE_SELECT): selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="input_select")
+    ),
     vol.Optional(CONF_AUTO_CONTROL_ENABLED, default=True): bool,
 })
 
@@ -144,15 +149,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         motion_sensor = user_input[CONF_MOTION_SENSOR]
         home_mode_select = user_input.get(CONF_HOME_MODE_SELECT)
 
-        # Validate light entities (can be comma-separated)
-        if isinstance(light_entities, str):
-            light_list = [e.strip() for e in light_entities.split(',') if e.strip()]
-            for light_entity in light_list:
+        # Validate light entities (now can be list from selector)
+        if isinstance(light_entities, list):
+            for light_entity in light_entities:
                 if not self.hass.states.get(light_entity):
                     errors[CONF_LIGHT_ENTITY] = "entity_not_found"
                     break
-        else:
-            if not self.hass.states.get(str(light_entities)):
+        elif isinstance(light_entities, str):
+            if not self.hass.states.get(light_entities):
                 errors[CONF_LIGHT_ENTITY] = "entity_not_found"
 
         if not self.hass.states.get(lux_sensor):
@@ -161,7 +165,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not self.hass.states.get(motion_sensor):
             errors[CONF_MOTION_SENSOR] = "entity_not_found"
 
-        if home_mode_select and home_mode_select.strip() and not self.hass.states.get(home_mode_select):
+        if home_mode_select and not self.hass.states.get(home_mode_select):
             errors[CONF_HOME_MODE_SELECT] = "entity_not_found"
 
         # Check if room name is unique

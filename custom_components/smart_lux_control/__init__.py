@@ -171,13 +171,13 @@ class SmartLuxCoordinator:
         self.entry = entry
         self.room_name = entry.data[CONF_ROOM_NAME]
         
-        # Entity IDs - support multiple lights
+        # Entity IDs - support multiple lights from selector
         light_entity_data = entry.data[CONF_LIGHT_ENTITY]
-        if isinstance(light_entity_data, str):
-            # Single entity or comma-separated entities
-            self.light_entities = [e.strip() for e in light_entity_data.split(',') if e.strip()]
-        elif isinstance(light_entity_data, list):
+        if isinstance(light_entity_data, list):
             self.light_entities = light_entity_data
+        elif isinstance(light_entity_data, str):
+            # Single entity (fallback)
+            self.light_entities = [light_entity_data]
         else:
             self.light_entities = [str(light_entity_data)]
         self.lux_sensor = entry.data[CONF_LUX_SENSOR]

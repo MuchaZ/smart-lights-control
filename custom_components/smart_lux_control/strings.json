@@ -5,20 +5,20 @@
         "title": "Smart Lux Control - Podstawowa konfiguracja (1/3)",
         "description": "Skonfiguruj podstawowe encje do sterowania światłem w tym pomieszczeniu",
         "data": {
-          "room_name": "Nazwa pokoju (np. salon, kuchnia, sypialnia)",
-          "light_entity": "Lampy do sterowania (entity_id lub kilka oddzielonych przecinkami)",
-          "lux_sensor": "Czujnik natężenia światła (sensor.xxx z device_class: illuminance)",
-          "motion_sensor": "Czujnik ruchu (binary_sensor.xxx z device_class: motion)",
-          "home_mode_select": "Tryby domu - opcjonalne (input_select.xxx z trybami)",
-          "auto_control_enabled": "Automatyczne sterowanie światłem włączone"
+          "room_name": "Nazwa pokoju",
+          "light_entity": "Lampy do sterowania",
+          "lux_sensor": "Czujnik natężenia światła",
+          "motion_sensor": "Czujnik ruchu", 
+          "home_mode_select": "Tryby domu (opcjonalnie)",
+          "auto_control_enabled": "Automatyczne sterowanie"
         },
         "data_description": {
-          "room_name": "Podaj unikalną nazwę pokoju bez spacji i polskich znaków (np. salon, kuchnia_dolna)",
-          "light_entity": "Wpisz entity_id lamp: light.salon_glowna lub kilka: light.salon_1,light.salon_2,light.salon_3",
-          "lux_sensor": "Wybierz czujnik światła który mierzy rzeczywiste oświetlenie w pomieszczeniu",
-          "motion_sensor": "Wybierz czujnik ruchu który będzie włączał automatycznie światło",
-          "home_mode_select": "Jeśli masz tryby domu (noc, impreza, film) - wybierz tutaj, inaczej zostaw puste",
-          "auto_control_enabled": "Czy automatycznie włączać/wyłączać światło na podstawie ruchu i czasu"
+          "room_name": "Unikalna nazwa bez spacji i polskich znaków (np. salon, kuchnia_dolna)",
+          "light_entity": "Wybierz jedną lub więcej lamp do automatycznego sterowania jasnością",
+          "lux_sensor": "Czujnik illuminance który mierzy rzeczywiste oświetlenie w pomieszczeniu",
+          "motion_sensor": "Czujnik motion który będzie włączał automatycznie światło przy wykryciu ruchu",
+          "home_mode_select": "Input select z trybami domu (noc, impreza, film) - opcjonalne",
+          "auto_control_enabled": "Czy automatycznie włączać/wyłączać światło na podstawie ruchu i czasu dnia"
         }
       },
       "lux_settings": {
