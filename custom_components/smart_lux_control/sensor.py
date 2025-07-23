@@ -113,6 +113,18 @@ class SmartLuxSensor(SensorEntity):
             time_since = (now - self._coordinator.last_motion_time).total_seconds() / 60
             return round(self._coordinator.keep_on_minutes - time_since, 1)
         
+        elif self._sensor_type == "motion_status":
+            motion_state = self._coordinator.hass.states.get(self._coordinator.motion_sensor)
+            if not motion_state:
+                return "Sensor Unavailable"
+            
+            if motion_state.state == "on":
+                return "Motion Detected"
+            elif self._coordinator.should_lights_be_on():
+                return "In Timer Period"
+            else:
+                return "No Motion"
+        
         return None
 
     def _calculate_average_error(self) -> Optional[float]:
@@ -198,6 +210,20 @@ class SmartLuxSensor(SensorEntity):
                 "keep_on_minutes": self._coordinator.keep_on_minutes,
                 "motion_currently_detected": motion_state.state == "on" if motion_state else False,
                 "last_motion_time": self._coordinator.last_motion_time.isoformat() if self._coordinator.last_motion_time else None,
+            })
+        
+        elif self._sensor_type == "motion_status":
+            motion_state = self._coordinator.hass.states.get(self._coordinator.motion_sensor)
+            from homeassistant.util import dt as dt_util
+            now = dt_util.now()
+            
+            attrs.update({
+                "motion_sensor_entity": self._coordinator.motion_sensor,
+                "motion_sensor_state": motion_state.state if motion_state else "unknown",
+                "should_lights_be_on": self._coordinator.should_lights_be_on(),
+                "auto_control_enabled": self._coordinator.auto_control_enabled,
+                "last_motion_trigger": self._coordinator.last_motion_time.isoformat() if self._coordinator.last_motion_time else None,
+                "time_since_motion": round((now - self._coordinator.last_motion_time).total_seconds() / 60, 1) if self._coordinator.last_motion_time else None,
             })
         
         return attrs

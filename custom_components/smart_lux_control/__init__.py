@@ -324,6 +324,13 @@ class SmartLuxCoordinator:
                 self.hass, [self.lux_sensor], self._async_lux_changed
             )
         )
+        
+        # Listen for motion sensor changes - IMMEDIATE RESPONSE
+        self._unsub_listeners.append(
+            async_track_state_change_event(
+                self.hass, [self.motion_sensor], self._async_motion_changed
+            )
+        )
     
     async def _async_light_changed(self, event) -> None:
         """Handle light state changes."""
@@ -350,6 +357,37 @@ class SmartLuxCoordinator:
         """Handle lux sensor changes."""
         # Could be used for future enhancements
         pass
+    
+    async def _async_motion_changed(self, event) -> None:
+        """Handle motion sensor changes - IMMEDIATE RESPONSE."""
+        if not self.auto_control_enabled:
+            return
+            
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        
+        if not new_state:
+            return
+            
+        # Motion detected - turn on lights IMMEDIATELY
+        if new_state.state == "on" and (not old_state or old_state.state == "off"):
+            from homeassistant.util import dt as dt_util
+            self.last_motion_time = dt_util.now()
+            
+            _LOGGER.info(
+                "🚶 Motion detected in %s - immediate light control", 
+                self.room_name
+            )
+            
+            # Run light control immediately instead of waiting for next check
+            await self.async_control_lights()
+        
+        # Motion stopped - start countdown but don't turn off yet
+        elif new_state.state == "off" and old_state and old_state.state == "on":
+            _LOGGER.info(
+                "🚶 Motion stopped in %s - countdown started (%d min)", 
+                self.room_name, self.keep_on_minutes
+            )
     
     async def async_add_sample(self, brightness: float, lux: float) -> None:
         """Add a sample to the dataset."""
@@ -813,10 +851,13 @@ class SmartLuxCoordinator:
         # Log action
         self.last_automation_action = f"{mode}_{current_brightness}→{target_brightness}_for_{target_lux:.1f}lx"
         
+        # Determine trigger type for better logging
+        trigger_type = "🚶 Motion" if self.should_lights_be_on() else "⏰ Timer"
+        
         _LOGGER.info(
-            "Smart Lux Control [%s]: %s mode, target: %.1flx, current: %.1flx, "
+            "%s triggered Smart Lux Control [%s]: %s mode, target: %.1flx, current: %.1flx, "
             "brightness: %d→%d, quality: %.2f",
-            self.room_name, mode, target_lux, current_lux, 
+            trigger_type, self.room_name, mode, target_lux, current_lux, 
             current_brightness, target_brightness, self.regression_quality
         )
     
@@ -855,10 +896,19 @@ class SmartLuxCoordinator:
         while True:
             try:
                 if self.auto_control_enabled:
+                    # Background check - mainly for turning off lights after timer
+                    # Immediate response is now handled by motion sensor trigger
                     await self.async_control_lights()
                 
-                # Wait for next check
-                await asyncio.sleep(self.check_interval)
+                # Check more frequently when lights are on or motion was recent
+                if self.lights_controlled_by_automation or self.should_lights_be_on():
+                    # Active state - check more often
+                    sleep_time = min(self.check_interval, 20)
+                else:
+                    # Idle state - check less often to save resources
+                    sleep_time = max(self.check_interval * 2, 60)
+                    
+                await asyncio.sleep(sleep_time)
                 
             except asyncio.CancelledError:
                 _LOGGER.info("Automation task cancelled for room: %s", self.room_name)

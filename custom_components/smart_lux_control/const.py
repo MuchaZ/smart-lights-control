@@ -111,6 +111,12 @@ SENSOR_TYPES = {
         "icon": "mdi:timer",
         "device_class": None,
     },
+    "motion_status": {
+        "name": "Motion Detection Status",
+        "unit": None,
+        "icon": "mdi:motion-sensor",
+        "device_class": None,
+    },
 }
 
 # Events
