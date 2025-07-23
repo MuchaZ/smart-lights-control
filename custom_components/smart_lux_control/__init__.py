@@ -315,6 +315,11 @@ class SmartLuxCoordinator:
         self.current_predicted_lux: Optional[float] = None
         self.last_automation_action: Optional[str] = None
         
+        # Brightness change tracking (to handle lux sensor lag)
+        self.last_brightness_change_time: Optional[datetime] = None
+        self.last_brightness_change_value: Optional[int] = None
+        self.brightness_cooldown_seconds = entry.data.get("brightness_cooldown_seconds", 10)  # Minimum time between brightness changes
+        
         # Smart mode settings
         self._smart_mode_enabled = True
         self._adaptive_learning_enabled = True
@@ -453,9 +458,50 @@ class SmartLuxCoordinator:
                 pass
     
     async def _async_lux_changed(self, event) -> None:
-        """Handle lux sensor changes."""
-        # Could be used for future enhancements
-        pass
+        """Handle lux sensor changes - detect when sensor updates after brightness change."""
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        
+        if not new_state or not old_state:
+            return
+            
+        # Check if this was a significant lux change after recent brightness adjustment
+        if self.last_brightness_change_time:
+            from homeassistant.util import dt as dt_util
+            now = dt_util.now()
+            seconds_since_brightness_change = (now - self.last_brightness_change_time).total_seconds()
+            
+            if seconds_since_brightness_change <= self.brightness_cooldown_seconds:
+                try:
+                    old_lux = float(old_state.state)
+                    new_lux = float(new_state.state)
+                    lux_change = abs(new_lux - old_lux)
+                    
+                    # If significant lux change (>10 lux) after brightness change, sensor caught up
+                    if lux_change > 10:
+                        _LOGGER.info(
+                            "📈 Lux sensor updated after brightness change: %.1f→%.1f lux (%.1fs delay)",
+                            old_lux, new_lux, seconds_since_brightness_change
+                        )
+                        
+                        # Consider triggering immediate re-evaluation if deviation still large
+                        current_target = self.current_target_lux or self.get_target_lux()
+                        new_deviation = abs(current_target - new_lux)
+                        
+                        if new_deviation > self.deviation_margin * 2:  # Only if large deviation remains
+                            _LOGGER.info(
+                                "🔄 Large deviation remains (%.1f lux), scheduling immediate re-check",
+                                new_deviation
+                            )
+                            # Reset cooldown to allow immediate adjustment
+                            self.last_brightness_change_time = None
+                            
+                            # Trigger control if motion still active
+                            if self.should_lights_be_on():
+                                await self.async_control_lights()
+                                
+                except (ValueError, TypeError):
+                    pass  # Invalid lux values, ignore
     
     async def _async_motion_changed(self, event) -> None:
         """Handle motion sensor changes - IMMEDIATE RESPONSE."""
@@ -953,6 +999,20 @@ class SmartLuxCoordinator:
         
         deviation = target_lux - current_lux
         
+        # Check for recent brightness change (lux sensor lag protection)
+        from homeassistant.util import dt as dt_util
+        now = dt_util.now()
+        
+        if self.last_brightness_change_time:
+            seconds_since_change = (now - self.last_brightness_change_time).total_seconds()
+            if seconds_since_change < self.brightness_cooldown_seconds:
+                self.last_automation_action = f"cooldown_wait_{seconds_since_change:.1f}s"
+                _LOGGER.info(
+                    "⏳ Brightness changed %.1fs ago, waiting for lux sensor to update (cooldown: %ds)",
+                    seconds_since_change, self.brightness_cooldown_seconds
+                )
+                return
+        
         # Log current situation for debugging
         _LOGGER.debug(
             "Light control check [%s]: target_lux=%.1f, current_lux=%.1f, deviation=%.1f, margin=%d",
@@ -985,7 +1045,16 @@ class SmartLuxCoordinator:
         
         if brightness_change_successful:
             self.lights_controlled_by_automation = True
-            _LOGGER.info("✅ Brightness change successful")
+            
+            # Record brightness change for cooldown tracking
+            from homeassistant.util import dt as dt_util
+            self.last_brightness_change_time = dt_util.now()
+            self.last_brightness_change_value = target_brightness
+            
+            _LOGGER.info(
+                "✅ Brightness change successful - cooldown active for %ds (lux sensor lag protection)",
+                self.brightness_cooldown_seconds
+            )
         else:
             _LOGGER.error("❌ Brightness change failed - lights may not be responding")
             # Don't set automation flag if lights didn't respond

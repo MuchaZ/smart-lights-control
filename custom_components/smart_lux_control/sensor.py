@@ -108,7 +108,16 @@ class SmartLuxSensor(SensorEntity):
                 return "Standby"
         
         elif self._sensor_type == "last_automation_action":
-            return self._coordinator.last_automation_action or "None"
+            action = self._coordinator.last_automation_action or "None"
+            
+            # Show human-readable cooldown status
+            if action.startswith("cooldown_wait_"):
+                seconds = action.split("_")[-1].replace("s", "")
+                try:
+                    return f"Cooldown ({float(seconds):.1f}s remaining)"
+                except ValueError:
+                    return action
+            return action
         
         elif self._sensor_type == "motion_timer":
             if not self._coordinator.last_motion_time:
@@ -280,6 +289,9 @@ class SmartLuxSensor(SensorEntity):
                 "lights_detail": lights_info,
                 "auto_control_enabled": self._coordinator.auto_control_enabled,
                 "last_action": self._coordinator.last_automation_action,
+                "brightness_cooldown_seconds": self._coordinator.brightness_cooldown_seconds,
+                "last_brightness_change": self._coordinator.last_brightness_change_time.isoformat() if self._coordinator.last_brightness_change_time else None,
+                "last_brightness_value": self._coordinator.last_brightness_change_value,
             })
         
         return attrs

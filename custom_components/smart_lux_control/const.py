@@ -26,6 +26,7 @@ CONF_BUFFER_MINUTES = "buffer_minutes"
 CONF_DEVIATION_MARGIN = "deviation_margin"
 CONF_CHECK_INTERVAL = "check_interval"
 CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
+CONF_BRIGHTNESS_COOLDOWN = "brightness_cooldown_seconds"
 
 # Default values
 DEFAULT_MIN_REGRESSION_QUALITY = 0.5
