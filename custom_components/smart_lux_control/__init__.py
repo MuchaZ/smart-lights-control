@@ -44,6 +44,7 @@ from .const import (
     SERVICE_ADAPTIVE_LEARNING,
     SERVICE_TEST_LIGHT_CONTROL,
     SERVICE_SYNC_LIGHT_STATES,
+    SERVICE_FORCE_LIGHT_REFRESH,
     STORAGE_VERSION,
     EVENT_REGRESSION_UPDATED,
     EVENT_SMART_MODE_CHANGED,
@@ -192,6 +193,47 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             
             _LOGGER.info("✅ Light states sync completed for %s", room_name)
     
+    async def force_light_refresh_service(call: ServiceCall) -> None:
+        """Service to force refresh light entity states."""
+        room_name = call.data.get("room_name")
+        
+        if not room_name:
+            _LOGGER.error("Room name is required for force_light_refresh service")
+            return
+            
+        coordinator = _get_coordinator_by_room(hass, room_name)
+        if coordinator:
+            _LOGGER.info("🔄 Force refreshing light entity states for %s", room_name)
+            
+            # Try to force state refresh by calling homeassistant.update_entity
+            for light_entity in coordinator.light_entities:
+                try:
+                    await hass.services.async_call(
+                        "homeassistant", "update_entity",
+                        {"entity_id": light_entity},
+                        blocking=True
+                    )
+                    _LOGGER.debug("Requested state refresh for %s", light_entity)
+                except Exception as err:
+                    _LOGGER.warning("Failed to refresh %s: %s", light_entity, err)
+            
+            # Wait a moment for updates to propagate
+            await asyncio.sleep(1)
+            
+            # Log updated states
+            for light_entity in coordinator.light_entities:
+                light_state = hass.states.get(light_entity)
+                if light_state:
+                    brightness = light_state.attributes.get("brightness", "N/A")
+                    _LOGGER.info(
+                        "💡 Refreshed state %s: state=%s, brightness=%s", 
+                        light_entity, light_state.state, brightness
+                    )
+                else:
+                    _LOGGER.warning("💡 Refreshed state %s: still unavailable", light_entity)
+            
+            _LOGGER.info("✅ Force refresh completed for %s", room_name)
+    
     # Register services
     hass.services.async_register(DOMAIN, SERVICE_CALCULATE_REGRESSION, calculate_regression_service)
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_SAMPLES, clear_samples_service)
@@ -200,6 +242,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, "calculate_target_brightness", calculate_target_brightness_service)
     hass.services.async_register(DOMAIN, SERVICE_TEST_LIGHT_CONTROL, test_light_control_service)
     hass.services.async_register(DOMAIN, SERVICE_SYNC_LIGHT_STATES, sync_light_states_service)
+    hass.services.async_register(DOMAIN, SERVICE_FORCE_LIGHT_REFRESH, force_light_refresh_service)
 
 
 def _get_coordinator_by_room(hass: HomeAssistant, room_name: str) -> Optional["SmartLuxCoordinator"]:
@@ -1001,30 +1044,52 @@ class SmartLuxCoordinator:
                     blocking=True
                 )
                 
-                # Wait for state to update
-                await asyncio.sleep(0.5)
-                
-                # Verify the change
-                new_state = self.hass.states.get(light_entity)
-                if new_state and new_state.state == "on":
-                    new_brightness = new_state.attributes.get("brightness", 255)
-                    brightness_diff = abs(new_brightness - brightness)
+                # Wait and retry state verification (some integrations are slow)
+                state_verified = False
+                for attempt in range(5):  # Try 5 times over 3 seconds
+                    wait_time = 0.6 + (attempt * 0.4)  # 0.6, 1.0, 1.4, 1.8, 2.2 seconds
+                    await asyncio.sleep(wait_time)
                     
-                    if brightness_diff <= 10:  # Allow small differences
-                        success_count += 1
-                        _LOGGER.debug(
-                            "✅ Light %s brightness set successfully: %d → %d", 
-                            light_entity, brightness, new_brightness
+                    # Get fresh state
+                    new_state = self.hass.states.get(light_entity)
+                    
+                    _LOGGER.debug(
+                        "Attempt %d/%d: Light %s state=%s, brightness=%s",
+                        attempt + 1, 5, light_entity,
+                        new_state.state if new_state else "None",
+                        new_state.attributes.get("brightness", "N/A") if new_state else "N/A"
+                    )
+                    
+                    if new_state and new_state.state == "on":
+                        new_brightness = new_state.attributes.get("brightness", 255)
+                        brightness_diff = abs(new_brightness - brightness)
+                        
+                        if brightness_diff <= 15:  # Allow more tolerance for slow updates
+                            success_count += 1
+                            state_verified = True
+                            _LOGGER.info(
+                                "✅ Light %s brightness verified after %.1fs: %d → %d (diff: %d)", 
+                                light_entity, wait_time, brightness, new_brightness, brightness_diff
+                            )
+                            break
+                        elif attempt == 4:  # Last attempt
+                            _LOGGER.warning(
+                                "⚠️ Light %s brightness mismatch after retries: requested %d, got %d", 
+                                light_entity, brightness, new_brightness
+                            )
+                            # Still count as partial success if light is on
+                            success_count += 0.5
+                            state_verified = True
+                    elif attempt == 4:  # Last attempt and still not on
+                        _LOGGER.error(
+                            "❌ Light %s failed to turn on after %.1fs (state: %s)", 
+                            light_entity, wait_time, new_state.state if new_state else "unknown"
                         )
-                    else:
-                        _LOGGER.warning(
-                            "⚠️ Light %s brightness mismatch: requested %d, got %d", 
-                            light_entity, brightness, new_brightness
-                        )
-                else:
-                    _LOGGER.warning(
-                        "❌ Light %s failed to turn on or respond (state: %s)", 
-                        light_entity, new_state.state if new_state else "unknown"
+                
+                if not state_verified:
+                    _LOGGER.error(
+                        "🔴 Light %s state verification failed - check integration responsiveness",
+                        light_entity
                     )
                     
             except Exception as err:
@@ -1034,10 +1099,24 @@ class SmartLuxCoordinator:
                 )
         
         success_rate = success_count / len(self.light_entities) if self.light_entities else 0
+        
+        # Log final summary with entity states for user visibility
         _LOGGER.info(
-            "Brightness change result: %d/%d lights successful (%.0f%%)", 
-            success_count, len(self.light_entities), success_rate * 100
+            "🔧 Brightness change summary for %s: %.1f/%d lights successful (%.0f%%)", 
+            self.room_name, success_count, len(self.light_entities), success_rate * 100
         )
+        
+        # Log current entity states for troubleshooting
+        for light_entity in self.light_entities:
+            current_state = self.hass.states.get(light_entity)
+            if current_state:
+                brightness = current_state.attributes.get("brightness", "N/A")
+                _LOGGER.info(
+                    "💡 Final state %s: state=%s, brightness=%s", 
+                    light_entity, current_state.state, brightness
+                )
+            else:
+                _LOGGER.warning("💡 Final state %s: entity not found", light_entity)
         
         return success_count > 0  # At least one light responded
     
