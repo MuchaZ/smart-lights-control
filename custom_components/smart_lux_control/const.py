@@ -10,6 +10,23 @@ CONF_LUX_SENSOR = "lux_sensor"
 CONF_MOTION_SENSOR = "motion_sensor"
 CONF_HOME_MODE_SELECT = "home_mode_select"
 
+# Lux settings
+CONF_LUX_NORMAL_DAY = "lux_normal_day"
+CONF_LUX_NORMAL_NIGHT = "lux_normal_night"
+CONF_LUX_MODE_NOC = "lux_mode_noc"
+CONF_LUX_MODE_IMPREZA = "lux_mode_impreza"
+CONF_LUX_MODE_RELAKS = "lux_mode_relaks"
+CONF_LUX_MODE_FILM = "lux_mode_film"
+CONF_LUX_MODE_SPRZATANIE = "lux_mode_sprzatanie"
+CONF_LUX_MODE_DZIECKO_SPI = "lux_mode_dziecko_spi"
+
+# Timing settings
+CONF_KEEP_ON_MINUTES = "keep_on_minutes"
+CONF_BUFFER_MINUTES = "buffer_minutes"
+CONF_DEVIATION_MARGIN = "deviation_margin"
+CONF_CHECK_INTERVAL = "check_interval"
+CONF_AUTO_CONTROL_ENABLED = "auto_control_enabled"
+
 # Default values
 DEFAULT_MIN_REGRESSION_QUALITY = 0.5
 DEFAULT_MAX_BRIGHTNESS_CHANGE = 50
@@ -33,6 +50,7 @@ SERVICE_CALCULATE_REGRESSION = "calculate_regression"
 SERVICE_CLEAR_SAMPLES = "clear_samples"
 SERVICE_ADD_SAMPLE = "add_sample"
 SERVICE_ADAPTIVE_LEARNING = "adaptive_learning"
+SERVICE_CALCULATE_TARGET_BRIGHTNESS = "calculate_target_brightness"
 
 # Sensor types
 SENSOR_TYPES = {
@@ -64,6 +82,30 @@ SENSOR_TYPES = {
         "name": "Average Prediction Error",
         "unit": "lx",
         "icon": "mdi:target",
+        "device_class": None,
+    },
+    "target_lux": {
+        "name": "Target Lux",
+        "unit": "lx",
+        "icon": "mdi:crosshairs",
+        "device_class": "illuminance",
+    },
+    "automation_status": {
+        "name": "Automation Status",
+        "unit": None,
+        "icon": "mdi:play-circle",
+        "device_class": None,
+    },
+    "last_automation_action": {
+        "name": "Last Automation Action",
+        "unit": None,
+        "icon": "mdi:history",
+        "device_class": None,
+    },
+    "motion_timer": {
+        "name": "Motion Timer",
+        "unit": "min",
+        "icon": "mdi:timer",
         "device_class": None,
     },
 }

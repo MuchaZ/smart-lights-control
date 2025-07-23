@@ -1,239 +1,252 @@
-# 🧠 Smart Lights Control for Home Assistant
+# 🌟 Smart Lux Control for Home Assistant
 
-[![GitHub release](https://img.shields.io/github/release/MuchaZ/smart-lights-control.svg)](https://github.com/MuchaZ/smart-lights-control/releases)
-[![GitHub stars](https://img.shields.io/github/stars/MuchaZ/smart-lights-control.svg)](https://github.com/MuchaZ/smart-lights-control/stargazers)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-compatible-blue.svg)](https://www.home-assistant.io/)
-[![HACS](https://img.shields.io/badge/HACS-compatible-orange.svg)](https://hacs.xyz/)
+**Inteligentne sterowanie oświetleniem z regresją liniową i automatycznym uczeniem się**
 
-**Inteligentny system zarządzania oświetleniem używający regresji liniowej i adaptacyjnego uczenia maszynowego.**
+Zaawansowany custom component do Home Assistant, który automatycznie steruje jasnością światła na podstawie docelowych poziomów lux, wykorzystując regresję liniową i adaptacyjne uczenie się.
 
-Zamiast ślepego zmieniania jasności o stały krok, system oblicza **precyzyjnie** jaką jasność ustawić żeby osiągnąć docelowy poziom lux.
+## ✨ **Główne funkcje**
 
-## 🎯 Główne zalety
+### 🧠 **Smart Mode**
+- **Regresja liniowa**: Precyzyjne obliczanie jasności na podstawie modelu matematycznego
+- **Automatyczne uczenie**: Zbieranie próbek i budowanie modelu brightness ↔ lux
+- **Jakość predykcji**: Wskaźnik R² pokazuje dokładność modelu
 
-- ⚡ **Natychmiastowe reakcje** - 1 precyzyjna korekta zamiast 3-5 prób
-- 🎯 **Wysoka dokładność** - ±10lx zamiast ±50lx tolerancji  
-- 🧠 **Samodoskonalenie** - system uczy się z każdą zmianą
-- 📊 **Pełny monitoring** - sensory jakości regresji i statusu
-- 🛡️ **Zabezpieczenia** - fallback gdy regresja niedokładna
+### 🏠 **Automatyczne sterowanie**
+- **Detekcja ruchu**: Automatyczne włączanie światła gdy ktoś wchodzi
+- **Timer**: Konfigurowalny czas świecenia po ostatnim ruchu  
+- **Tryby domu**: Różne poziomy lux dla różnych aktywności
+- **Dzień/noc**: Automatyczne przejścia bazowane na wschodzące/zachodzące słońce
 
-## 🚀 Przed i Po
+### 📈 **Adaptacyjne uczenie**
+- **Weighted regression**: Nowsze próbki mają większy wpływ na model
+- **Exponential decay**: Starsze dane stopniowo tracą na znaczeniu
+- **Outlier filtering**: Automatyczne filtrowanie błędnych pomiarów
 
-### PRZED (stary system):
+### 🎛️ **Fallback mode**
+- **Step adjustment**: Gdy model nie jest wystarczająco dobry
+- **Bezpieczne sterowanie**: Zawsze działa, nawet bez regresji
+
+## 🚀 **Instalacja**
+
+### Przez HACS (Rekomendowane)
+
+1. **Dodaj repository**: W HACS → Integracje → Menu (⋮) → Repozytoria niestandardowe
+   ```
+   https://github.com/MuchaZ/smart-lights-control
+   ```
+
+2. **Zainstaluj**: Wyszukaj "Smart Lux Control" i zainstaluj
+
+3. **Restart Home Assistant**
+
+4. **Dodaj integrację**: Ustawienia → Urządzenia i usługi → Dodaj integrację → "Smart Lux Control"
+
+### Konfiguracja przez UI
+
+Component ma **3-etapową konfigurację**:
+
+#### **Krok 1/3: Podstawowa konfiguracja**
+- **Nazwa pokoju**: Unikalna nazwa (np. `living_room`)
+- **Lampy**: Wybierz jedną lub więcej lamp do sterowania
+- **Czujnik lux**: Sensor illuminance (np. czujnik Xiaomi)
+- **Czujnik ruchu**: Binary sensor motion
+- **Tryb domu**: (Opcjonalnie) input_select z trybami
+- **Auto sterowanie**: Włącz automatyczne sterowanie
+
+#### **Krok 2/3: Ustawienia lux**
+- **Normal dzień**: 400 lx (światło dzienne)
+- **Normal noc**: 150 lx (wieczorem)  
+- **Tryb noc**: 10 lx (nocne oświetlenie)
+- **Tryb impreza**: 500 lx (jasno na przyjęcie)
+- **Tryb relaks**: 120 lx (spokojny wieczór)
+- **Tryb film**: 60 lx (oglądanie TV)
+- **Tryb sprzątanie**: 600 lx (prace domowe)
+- **Tryb dziecko śpi**: 8 lx (minimalne światło)
+
+#### **Krok 3/3: Timing**
+- **Czas świecenia**: 5 min (jak długo świecić po ruchu)
+- **Bufor dzień/noc**: 30 min (płynne przejścia)
+- **Tolerancja**: 15 lx (dopuszczalne odchylenie)
+- **Sprawdzanie**: 30s (jak często sprawdzać warunki)
+
+## 🎛️ **Encje**
+
+Po instalacji otrzymujesz dla każdego pokoju:
+
+### 🔘 **Switche**
+- `switch.{pokój}_smart_mode` - Włącz/wyłącz tryb inteligentny
+- `switch.{pokój}_adaptive_learning` - Włącz/wyłącz adaptacyjne uczenie  
+- `switch.{pokój}_auto_control` - Włącz/wyłącz automatyczne sterowanie
+
+### 📊 **Sensory**
+- `sensor.{pokój}_regression_quality` - Jakość modelu (R²)
+- `sensor.{pokój}_sample_count` - Liczba zebranych próbek
+- `sensor.{pokój}_smart_mode_status` - Status trybu (Smart/Fallback/Learning)
+- `sensor.{pokój}_predicted_lux` - Przewidywane lux dla aktualnej jasności
+- `sensor.{pokój}_average_error` - Średni błąd predykcji
+- `sensor.{pokój}_target_lux` - Aktualnie docelowe lux
+- `sensor.{pokój}_automation_status` - Status automatyzacji (Active/Standby/Disabled)
+- `sensor.{pokój}_last_automation_action` - Ostatnie działanie
+- `sensor.{pokój}_motion_timer` - Pozostały czas do wyłączenia po ruchu
+
+## 🛠️ **Serwisy**
+
+### Zarządzanie próbkami
+```yaml
+# Ręczne dodanie próbki
+service: smart_lux_control.add_sample
+data:
+  room_name: living_room
+  brightness: 200
+  lux: 450
 ```
-Docelowe: 300lx, Obecne: 200lx
-❌ Dodaj +20 brightness (na ślepo)
-❌ Czekaj i sprawdź... może dodaj kolejne +20
-❌ Może jeszcze +20? Jak długo to będzie trwać?
-```
-
-### PO (smart system):
-```
-Docelowe: 300lx, Obecne: 200lx
-🧠 Regresja: lux = 2.5 * brightness + 15
-🧠 Potrzebuję: (300-15)/2.5 = 114 brightness
-✅ Ustaw natychmiast 114 brightness = dokładnie 300lx!
-```
-
-## 📦 Instalacja
-
-### Metoda 1: HACS (Rekomendowana)
-
-1. **HACS** → **Integrations** → **Custom repositories**
-2. Dodaj URL: `https://github.com/MuchaZ/smart-lights-control`
-3. Kategoria: **Integration**
-4. **Install** → **Restart HA**
-
-### Metoda 2: Ręczna instalacja
-
-```bash
-# W folderze config Home Assistant:
-cd /config
-git clone https://github.com/MuchaZ/smart-lights-control.git
-cp -r smart-lights-control/custom_components/smart_lux_control custom_components/
-```
-
-## ⚡ Konfiguracja
-
-### 1. Restart Home Assistant
-```
-Settings → System → Restart
-```
-
-### 2. Dodaj integrację
-```
-Settings → Devices & Services → Add Integration
-→ Szukaj: "Smart Lux Control"
-```
-
-### 3. Wypełnij formularz
-- **Room Name**: `living_room` (nazwa pokoju)
-- **Light Entity**: Wybierz swoją lampę
-- **Lux Sensor**: Wybierz czujnik lux  
-- **Motion Sensor**: Wybierz czujnik ruchu
-- **Home Mode Select**: (Opcjonalnie) input_select z trybami domu
-
-### 4. Gotowe! 🎉
-
-## 🧠 Co dostajesz automatycznie
-
-### Sensory (bez dodatkowej konfiguracji!)
-- `sensor.ROOM_regression_quality` - Jakość regresji (R²)
-- `sensor.ROOM_sample_count` - Liczba próbek w systemie
-- `sensor.ROOM_smart_mode_status` - Status (Smart/Fallback/Learning)
-- `sensor.ROOM_predicted_lux` - Przewidywane lux dla obecnej jasności
-- `sensor.ROOM_average_error` - Średni błąd przewidywań
-
-### Przełączniki
-- `switch.ROOM_smart_mode` - Włącz/wyłącz smart mode
-- `switch.ROOM_adaptive_learning` - Włącz/wyłącz adaptacyjne uczenie
-
-### Serwisy
-- `smart_lux_control.calculate_regression` - Przelicz regresję
-- `smart_lux_control.clear_samples` - Wyczyść próbki
-- `smart_lux_control.add_sample` - Dodaj próbkę ręcznie
-- `smart_lux_control.adaptive_learning` - Uruchom adaptacyjne uczenie
-
-## 🎯 Przykład użycia
-
-### Automatyzacja z inteligentnym sterowaniem:
 
 ```yaml
-alias: "Smart Light Control - Living Room"
-trigger:
-  - platform: state
-    entity_id: binary_sensor.living_room_motion
-    to: "on"
-  - platform: time_pattern
-    seconds: "/30"
-condition:
-  - condition: state
-    entity_id: switch.living_room_smart_mode
-    state: "on"
-action:
-  - service: smart_lux_control.calculate_target_brightness
-    data:
-      room_name: "living_room"
-      target_lux: 300
-    response_variable: target_brightness
-  - service: light.turn_on
-    target:
-      entity_id: light.living_room
-    data:
-      brightness: "{{ target_brightness.brightness }}"
-      transition: 2
+# Wyczyść wszystkie próbki
+service: smart_lux_control.clear_samples
+data:
+  room_name: living_room
 ```
 
-### Monitoring jakości regresji:
+### Regresja i uczenie
+```yaml
+# Przelicz regresję
+service: smart_lux_control.calculate_regression
+data:
+  room_name: living_room
+```
 
 ```yaml
-# Automatyczne powiadomienie o niskiej jakości
-automation:
-  - alias: "Ostrzeżenie o słabej regresji"
-    trigger:
-      - platform: numeric_state
-        entity_id: sensor.living_room_regression_quality
-        below: 0.4
-    action:
-      - service: notify.mobile_app
-        data:
-          title: "⚠️ Słaba jakość regresji"
-          message: "System światła w {{ trigger.to_state.name }} potrzebuje więcej próbek"
+# Uruchom adaptacyjne uczenie
+service: smart_lux_control.adaptive_learning
+data:
+  room_name: living_room
 ```
 
-## 📊 Dashboard
+### Sterowanie jasności
+```yaml
+# Oblicz optymalną jasność dla docelowego lux
+service: smart_lux_control.calculate_target_brightness
+data:
+  room_name: living_room
+  target_lux: 300
+  current_brightness: 255
+```
 
-Dodaj karty do monitorowania:
+## 📋 **Jak to działa**
+
+### 1. **Faza uczenia** (pierwsze dni)
+- Component zbiera próbki: brightness → lux measurement
+- Automatycznie po każdej zmianie jasności lampy
+- Minimum 5 próbek do uruchomienia smart mode
+
+### 2. **Smart mode** (gdy model jest dobry)
+- Używa regresji: `lux = a × brightness + b`
+- Odwraca wzór: `brightness = (target_lux - b) / a`
+- Precyzyjne sterowanie - dokładnie ta jasność, która da żądane lux
+
+### 3. **Automatyczne sterowanie**
+- Sprawdza co 30s (konfigurowalny)
+- **Ruch wykryty** → Światło ON, docelowy lux bazowany na trybie domu i czasie
+- **Brak ruchu 5 min** → Światło OFF
+- **Smart mode**: Kalkuluje dokładną jasność
+- **Fallback**: Zwiększa/zmniejsza jasność krokowo (+/-30)
+
+### 4. **Adaptacyjne uczenie**
+- Nowsze próbki mają większą wagę w modelu
+- Eksponencjalny spadek wagi starszych danych
+- Automatyczne usuwanie outlierów
+- Model staje się lepszy z czasem
+
+## 🏡 **Konfiguracja trybów domu**
+
+Stwórz `input_select` z trybami:
+
+```yaml
+input_select:
+  home_mode:
+    name: Tryb domu
+    options:
+      - normal
+      - noc  
+      - impreza
+      - relaks
+      - film
+      - sprzatanie
+      - dziecko_spi
+    initial: normal
+```
+
+## 📊 **Dashboard**
+
+Przykład karty Lovelace:
 
 ```yaml
 type: entities
-title: Smart Light Control - Living Room
+title: Smart Lux Control - Salon
 entities:
-  - sensor.living_room_smart_mode_status
-  - sensor.living_room_regression_quality
-  - sensor.living_room_sample_count
-  - sensor.living_room_predicted_lux
-  - switch.living_room_smart_mode
-  - switch.living_room_adaptive_learning
+  - entity: switch.salon_auto_control
+    name: Automatyczne sterowanie
+  - entity: switch.salon_smart_mode  
+    name: Tryb inteligentny
+  - entity: sensor.salon_automation_status
+    name: Status automatyzacji
+  - entity: sensor.salon_target_lux
+    name: Docelowe lux
+  - entity: sensor.salon_predicted_lux
+    name: Aktualne lux (przewidywane)
+  - entity: sensor.salon_regression_quality
+    name: Jakość modelu
+  - entity: sensor.salon_sample_count
+    name: Próbki
+  - entity: sensor.salon_motion_timer
+    name: Timer ruchu
 ```
 
-## 🔧 Zaawansowane ustawienia
+## 🔧 **Zaawansowane opcje**
 
-```
-Settings → Devices & Services → Smart Lux Control → Options
-```
+W ustawieniach integracji możesz dostroić:
+- **Minimalna jakość regresji**: 0.5 (kiedy używać smart mode)
+- **Maksymalna zmiana jasności**: 50 (ograniczenie zmiany za jednym razem)
+- **Szybkość uczenia**: 0.1 (jak szybko model się uczy)
 
-Dostosuj parametry:
-- **Min Regression Quality**: Próg jakości dla smart mode (domyślnie 0.5)
-- **Max Brightness Change**: Maksymalna zmiana jasności za jednym razem (domyślnie 50)
-- **Deviation Margin**: Tolerancja różnicy lux (domyślnie 15)
-- **Learning Rate**: Szybkość adaptacyjnego uczenia (domyślnie 0.1)
+## 🚨 **Rozwiązywanie problemów**
 
-## 🧪 Jak to działa
+### Model nie uczy się
+- Sprawdź czy czujnik lux działa: `sensor.{room}_predicted_lux`
+- Poczekaj na więcej próbek: min. 5 dla smart mode, 15+ dla dobrej jakości
+- Sprawdź logi: `grep "Smart Lux Control" home-assistant.log`
 
-### 1. Zbieranie danych
-System automatycznie zbiera pary `brightness → lux` gdy zmieniasz światło.
+### Światła się nie włączają
+- Sprawdź `switch.{room}_auto_control` - czy włączony?
+- Sprawdź czujnik ruchu: `binary_sensor.{motion_sensor}`
+- Sprawdź `sensor.{room}_automation_status` - powinien być "Active" przy ruchu
 
-### 2. Regresja liniowa
-Oblicza równanie: `lux = a × brightness + b`
+### Smart mode nie działa
+- Sprawdź `sensor.{room}_regression_quality` - powinien być >0.5
+- Sprawdź `sensor.{room}_smart_mode_status` - czy "Smart Active"?
+- Jeśli "Fallback Mode" - zbierz więcej próbek lub zwiększ tolerancję
 
-### 3. Smart obliczenia
-Gdy potrzebujesz konkretnego poziomu lux, system używa wzoru:
-`brightness = (target_lux - b) / a`
+## 🤝 **Wkład w projekt**
 
-### 4. Adaptacyjne uczenie
-System regularnie poprawia model na podstawie nowych danych.
+1. Fork repository
+2. Stwórz branch: `git checkout -b feature/amazing-feature`
+3. Commit: `git commit -m 'Add amazing feature'`
+4. Push: `git push origin feature/amazing-feature`
+5. Otwórz Pull Request
 
-### 5. Zabezpieczenia
-Gdy regresja jest niedokładna (R² < 0.5), system przełącza się na tryb awaryjny.
+## 📄 **Licencja**
 
-## 📈 Interpretacja R² (jakości regresji)
+MIT License - zobacz [LICENSE](LICENSE)
 
-- **R² > 0.8** 🟢 - Doskonała jakość, smart mode w pełni aktywny
-- **R² 0.5-0.8** 🟡 - Dobra jakość, smart mode działa dobrze  
-- **R² < 0.5** 🔴 - Słaba jakość, system używa trybu awaryjnego
+## ❤️ **Podziękowania**
 
-## 🔧 Troubleshooting
-
-### Smart Mode nie włącza się
-1. Sprawdź `sensor.ROOM_regression_quality` - musi być > 0.5
-2. Zbierz więcej próbek (różne jasności w różnych warunkach)
-3. Sprawdź czy czujnik lux reaguje na zmiany światła
-
-### Nieprawidłowe przewidywania
-1. Wyczyść próbki: `smart_lux_control.clear_samples`
-2. Sprawdź pozycjonowanie czujnika lux
-3. Upewnij się że światło wpływa na czujnik
-
-### Brak próbek
-1. Sprawdź czy automatyzacja działa
-2. Włącz/wyłącz światło kilka razy ręcznie
-3. Zmień jasność w różnych zakresach (10%, 50%, 100%)
-
-## 🏠 Multi-room
-
-Dla każdego pokoju po prostu dodaj kolejną integrację:
-```
-Settings → Devices & Services → Add Integration → Smart Lux Control
-```
-
-Każdy pokój ma własne:
-- Sensory (`sensor.ROOM_regression_quality`)
-- Przełączniki (`switch.ROOM_smart_mode`)
-- Model regresji (niezależny od innych)
-
-## 🤝 Współpraca
-
-Zgłoś błędy, sugestie lub pull requesty na [GitHub Issues](https://github.com/MuchaZ/smart-lights-control/issues).
-
-## 📜 Licencja
-
-MIT License - zobacz [LICENSE](LICENSE) plik.
-
-## ⭐ Wsparcie
-
-Jeśli ten projekt Ci pomógł, zostaw ⭐ na GitHubie!
+- Home Assistant community
+- HACS team
+- Wszyscy testerzy i współtwórcy
 
 ---
 
-**Twoje światło jest teraz naprawdę inteligentne! 🧠💡** 
+**Stworzone z ❤️ dla społeczności Home Assistant**
+
+📧 Problemy i pytania: [GitHub Issues](https://github.com/MuchaZ/smart-lights-control/issues) 

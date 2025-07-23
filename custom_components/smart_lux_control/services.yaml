@@ -58,4 +58,34 @@ adaptive_learning:
       description: Name of the room
       required: true
       selector:
-        text: 
+        text:
+
+calculate_target_brightness:
+  name: Calculate Target Brightness
+  description: Calculate optimal brightness for desired lux level
+  fields:
+    room_name:
+      name: Room Name
+      description: Name of the room
+      required: true
+      selector:
+        text:
+    target_lux:
+      name: Target Lux
+      description: Desired lux level
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 2000
+          step: 1
+    current_brightness:
+      name: Current Brightness
+      description: Current brightness (for fallback calculation)
+      required: false
+      default: 255
+      selector:
+        number:
+          min: 1
+          max: 255
+          step: 1 

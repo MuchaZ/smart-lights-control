@@ -80,6 +80,30 @@ class SmartLuxSensor(SensorEntity):
         elif self._sensor_type == "average_error":
             return self._calculate_average_error()
         
+        elif self._sensor_type == "target_lux":
+            target = self._coordinator.current_target_lux
+            return round(target, 1) if target is not None else self._coordinator.get_target_lux()
+        
+        elif self._sensor_type == "automation_status":
+            if not self._coordinator.auto_control_enabled:
+                return "Disabled"
+            elif self._coordinator.should_lights_be_on():
+                return "Active"
+            else:
+                return "Standby"
+        
+        elif self._sensor_type == "last_automation_action":
+            return self._coordinator.last_automation_action or "None"
+        
+        elif self._sensor_type == "motion_timer":
+            if not self._coordinator.last_motion_time:
+                return None
+            
+            from homeassistant.util import dt as dt_util
+            now = dt_util.now()
+            time_since = (now - self._coordinator.last_motion_time).total_seconds() / 60
+            return round(self._coordinator.keep_on_minutes - time_since, 1)
+        
         return None
 
     def _calculate_average_error(self) -> Optional[float]:
@@ -122,6 +146,34 @@ class SmartLuxSensor(SensorEntity):
             attrs.update({
                 "max_samples": self._coordinator.max_samples,
                 "last_regression_update": self._get_last_sample_time(),
+            })
+        
+        elif self._sensor_type == "automation_status":
+            attrs.update({
+                "motion_detected": self._coordinator.should_lights_be_on(),
+                "lights_controlled": self._coordinator.lights_controlled_by_automation,
+                "check_interval": self._coordinator.check_interval,
+            })
+        
+        elif self._sensor_type == "target_lux":
+            # Get home mode if available
+            mode = "normal"
+            if self._coordinator.home_mode_select:
+                mode_state = self._coordinator.hass.states.get(self._coordinator.home_mode_select)
+                if mode_state:
+                    mode = mode_state.state
+            
+            attrs.update({
+                "home_mode": mode,
+                "lux_settings": self._coordinator.lux_settings,
+                "buffer_minutes": self._coordinator.buffer_minutes,
+            })
+        
+        elif self._sensor_type == "motion_timer":
+            attrs.update({
+                "keep_on_minutes": self._coordinator.keep_on_minutes,
+                "motion_currently_detected": self._coordinator.hass.states.get(self._coordinator.motion_sensor).state == "on" if self._coordinator.hass.states.get(self._coordinator.motion_sensor) else False,
+                "last_motion_time": self._coordinator.last_motion_time.isoformat() if self._coordinator.last_motion_time else None,
             })
         
         return attrs

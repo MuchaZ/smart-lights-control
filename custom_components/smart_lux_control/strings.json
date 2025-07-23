@@ -2,20 +2,45 @@
   "config": {
     "step": {
       "user": {
-        "title": "Smart Lux Control Setup",
-        "description": "Configure smart lighting control for a room",
+        "title": "Smart Lux Control - Konfiguracja podstawowa ({step})",
+        "description": "{step_name}",
         "data": {
-          "room_name": "Room Name",
-          "light_entity": "Light Entity",
-          "lux_sensor": "Lux Sensor",
-          "motion_sensor": "Motion Sensor",
-          "home_mode_select": "Home Mode Select (Optional)"
+          "room_name": "Nazwa pokoju",
+          "light_entity": "Lampy (można wybrać kilka)",
+          "lux_sensor": "Czujnik światła (lux/illuminance)",
+          "motion_sensor": "Czujnik ruchu",
+          "home_mode_select": "Tryb domu (opcjonalnie)",
+          "auto_control_enabled": "Włącz automatyczne sterowanie"
+        }
+      },
+      "lux_settings": {
+        "title": "Smart Lux Control - Ustawienia lux ({step})",
+        "description": "{step_name} - {room_name}",
+        "data": {
+          "lux_normal_day": "Normal - dzień (lx)",
+          "lux_normal_night": "Normal - noc (lx)",
+          "lux_mode_noc": "Tryb noc (lx)",
+          "lux_mode_impreza": "Tryb impreza (lx)",
+          "lux_mode_relaks": "Tryb relaks (lx)",
+          "lux_mode_film": "Tryb film (lx)",
+          "lux_mode_sprzatanie": "Tryb sprzątanie (lx)",
+          "lux_mode_dziecko_spi": "Tryb dziecko śpi (lx)"
+        }
+      },
+      "timing_settings": {
+        "title": "Smart Lux Control - Ustawienia czasowe ({step})",
+        "description": "{step_name} - {room_name}",
+        "data": {
+          "keep_on_minutes": "Czas świecenia po ruchu (minuty)",
+          "buffer_minutes": "Bufor przejścia dzień/noc (minuty)",
+          "deviation_margin": "Tolerancja różnicy lux (lx)",
+          "check_interval": "Częstotliwość sprawdzania (sekundy)"
         }
       }
     },
     "error": {
-      "entity_not_found": "Entity not found",
-      "room_already_configured": "Room already configured"
+      "entity_not_found": "Encja nie została znaleziona",
+      "room_already_configured": "Pokój już skonfigurowany"
     }
   },
   "options": {

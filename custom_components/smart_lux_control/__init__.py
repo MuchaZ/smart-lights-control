@@ -119,11 +119,27 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         if coordinator:
             await coordinator.async_adaptive_learning()
     
+    async def calculate_target_brightness_service(call: ServiceCall) -> None:
+        """Service to calculate target brightness for desired lux level."""
+        room_name = call.data.get("room_name")
+        target_lux = call.data.get("target_lux")
+        current_brightness = call.data.get("current_brightness", 255)
+        
+        if not all([room_name, target_lux is not None]):
+            _LOGGER.error("Room name and target_lux are required for calculate_target_brightness service")
+            return
+            
+        coordinator = _get_coordinator_by_room(hass, room_name)
+        if coordinator:
+            brightness = coordinator.calculate_target_brightness(target_lux, current_brightness)
+            return {"brightness": brightness}
+    
     # Register services
     hass.services.async_register(DOMAIN, SERVICE_CALCULATE_REGRESSION, calculate_regression_service)
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_SAMPLES, clear_samples_service)
     hass.services.async_register(DOMAIN, SERVICE_ADD_SAMPLE, add_sample_service)
     hass.services.async_register(DOMAIN, SERVICE_ADAPTIVE_LEARNING, adaptive_learning_service)
+    hass.services.async_register(DOMAIN, "calculate_target_brightness", calculate_target_brightness_service)
 
 
 def _get_coordinator_by_room(hass: HomeAssistant, room_name: str) -> Optional["SmartLuxCoordinator"]:
@@ -142,10 +158,34 @@ class SmartLuxCoordinator:
         self.hass = hass
         self.entry = entry
         self.room_name = entry.data[CONF_ROOM_NAME]
-        self.light_entity = entry.data[CONF_LIGHT_ENTITY]
+        
+        # Entity IDs - support multiple lights
+        self.light_entities = entry.data[CONF_LIGHT_ENTITY]
+        if not isinstance(self.light_entities, list):
+            self.light_entities = [self.light_entities]
         self.lux_sensor = entry.data[CONF_LUX_SENSOR]
         self.motion_sensor = entry.data[CONF_MOTION_SENSOR]
         self.home_mode_select = entry.data.get(CONF_HOME_MODE_SELECT)
+        
+        # Lux configuration for different modes
+        self.lux_settings = {
+            "normal_day": entry.data.get(CONF_LUX_NORMAL_DAY, 400),
+            "normal_night": entry.data.get(CONF_LUX_NORMAL_NIGHT, 150),
+            "noc": entry.data.get(CONF_LUX_MODE_NOC, 10),
+            "impreza": entry.data.get(CONF_LUX_MODE_IMPREZA, 500),
+            "relaks": entry.data.get(CONF_LUX_MODE_RELAKS, 120),
+            "film": entry.data.get(CONF_LUX_MODE_FILM, 60),
+            "sprzatanie": entry.data.get(CONF_LUX_MODE_SPRZATANIE, 600),
+            "dziecko_spi": entry.data.get(CONF_LUX_MODE_DZIECKO_SPI, 8),
+        }
+        
+        # Timing settings
+        self.keep_on_minutes = entry.data.get(CONF_KEEP_ON_MINUTES, 5)
+        self.buffer_minutes = entry.data.get(CONF_BUFFER_MINUTES, 30)
+        self.check_interval = entry.data.get(CONF_CHECK_INTERVAL, 30)
+        
+        # Auto control settings
+        self.auto_control_enabled = entry.data.get(CONF_AUTO_CONTROL_ENABLED, True)
         
         # Regression data
         self.samples: List[Tuple[float, float, datetime]] = []
@@ -157,14 +197,26 @@ class SmartLuxCoordinator:
         # Settings
         self.min_regression_quality = DEFAULT_MIN_REGRESSION_QUALITY
         self.max_brightness_change = DEFAULT_MAX_BRIGHTNESS_CHANGE
-        self.deviation_margin = DEFAULT_DEVIATION_MARGIN
+        self.deviation_margin = entry.data.get(CONF_DEVIATION_MARGIN, DEFAULT_DEVIATION_MARGIN)
         self.learning_rate = DEFAULT_LEARNING_RATE
+        
+        # Motion and automation tracking
+        self.last_motion_time: Optional[datetime] = None
+        self.lights_controlled_by_automation = False
+        self.current_target_lux: Optional[float] = None
+        self.current_predicted_lux: Optional[float] = None
+        self.last_automation_action: Optional[str] = None
+        
+        # Smart mode settings
+        self._smart_mode_enabled = True
+        self._adaptive_learning_enabled = True
         
         # Storage
         self.store = Store(hass, STORAGE_VERSION, f"{DOMAIN}_{self.room_name}")
         
         # State tracking
         self._unsub_listeners = []
+        self._automation_task: Optional[asyncio.Task] = None
     
     async def async_setup(self) -> None:
         """Set up the coordinator."""
@@ -174,10 +226,22 @@ class SmartLuxCoordinator:
         # Set up state change listeners
         await self._async_setup_listeners()
         
+        # Start automation task if auto control is enabled
+        if self.auto_control_enabled:
+            await self._async_start_automation_task()
+        
         _LOGGER.info("Smart Lux Control coordinator set up for room: %s", self.room_name)
     
     async def async_unload(self) -> None:
         """Unload the coordinator."""
+        # Cancel automation task
+        if self._automation_task:
+            self._automation_task.cancel()
+            try:
+                await self._automation_task
+            except asyncio.CancelledError:
+                pass
+            
         for unsub in self._unsub_listeners:
             unsub()
         self._unsub_listeners.clear()
@@ -230,10 +294,10 @@ class SmartLuxCoordinator:
     
     async def _async_setup_listeners(self) -> None:
         """Set up state change listeners."""
-        # Listen for light changes
+        # Listen for light changes from all controlled lights
         self._unsub_listeners.append(
             async_track_state_change_event(
-                self.hass, [self.light_entity], self._async_light_changed
+                self.hass, self.light_entities, self._async_light_changed
             )
         )
         
@@ -535,20 +599,54 @@ class SmartLuxCoordinator:
         """Get target lux based on current home mode and time."""
         if self.home_mode_select:
             mode_state = self.hass.states.get(self.home_mode_select)
-            if mode_state:
-                mode = mode_state.state
-                if mode in LUX_MODES:
-                    return LUX_MODES[mode]
+            if mode_state and mode_state.state in self.lux_settings:
+                return float(self.lux_settings[mode_state.state])
         
-        # Default: time-based normal mode
+        # Default: time-based normal mode with sunrise/sunset logic
+        from homeassistant.helpers import sun
         from homeassistant.util import dt as dt_util
-        now = dt_util.now()
         
-        # Simple day/night logic (can be enhanced)
+        now = dt_util.now()
+        now_ts = now.timestamp()
+        
+        # Get sunrise/sunset times
+        sun_state = self.hass.states.get("sun.sun")
+        if sun_state:
+            sunrise = sun_state.attributes.get("next_rising")
+            sunset = sun_state.attributes.get("next_setting")
+            
+            if sunrise and sunset:
+                sunrise_ts = dt_util.parse_datetime(sunrise).timestamp() - 86400  # Previous sunrise
+                sunset_ts = dt_util.parse_datetime(sunset).timestamp()
+                
+                # Calculate with buffer
+                buffer_seconds = self.buffer_minutes * 60
+                
+                # Day/night transition logic
+                if sunrise_ts <= now_ts < (sunrise_ts + buffer_seconds):
+                    # Sunrise transition
+                    ratio = (now_ts - sunrise_ts) / buffer_seconds
+                    lux_day = float(self.lux_settings["normal_day"])
+                    lux_night = float(self.lux_settings["normal_night"])
+                    return lux_night + (lux_day - lux_night) * ratio
+                elif (sunset_ts - buffer_seconds) < now_ts <= sunset_ts:
+                    # Sunset transition
+                    ratio = 1 - ((now_ts - (sunset_ts - buffer_seconds)) / buffer_seconds)
+                    lux_day = float(self.lux_settings["normal_day"])
+                    lux_night = float(self.lux_settings["normal_night"])
+                    return lux_night + (lux_day - lux_night) * ratio
+                elif sunrise_ts + buffer_seconds <= now_ts < (sunset_ts - buffer_seconds):
+                    # Full day
+                    return float(self.lux_settings["normal_day"])
+                else:
+                    # Full night
+                    return float(self.lux_settings["normal_night"])
+        
+        # Fallback: simple hour-based logic
         if 6 <= now.hour <= 22:
-            return LUX_MODES["normal_day"]
+            return float(self.lux_settings["normal_day"])
         else:
-            return LUX_MODES["normal_night"]
+            return float(self.lux_settings["normal_night"])
     
     @property
     def is_smart_mode_active(self) -> bool:
@@ -563,12 +661,207 @@ class SmartLuxCoordinator:
     @property
     def predicted_lux(self) -> Optional[float]:
         """Get predicted lux for current brightness."""
-        light_state = self.hass.states.get(self.light_entity)
-        if not light_state or light_state.state != "on":
+        # Get average brightness from all controlled lights
+        total_brightness = 0
+        light_count = 0
+        
+        for light_entity in self.light_entities:
+            light_state = self.hass.states.get(light_entity)
+            if light_state and light_state.state == "on":
+                brightness = light_state.attributes.get("brightness")
+                if brightness is not None:
+                    total_brightness += brightness
+                    light_count += 1
+        
+        if light_count == 0:
             return None
         
-        brightness = light_state.attributes.get("brightness")
-        if brightness is None:
-            return None
+        avg_brightness = total_brightness / light_count
+        return self.regression_a * avg_brightness + self.regression_b
+    
+    def should_lights_be_on(self) -> bool:
+        """Check if lights should be on based on motion and time."""
+        if not self.auto_control_enabled:
+            return False
         
-        return self.regression_a * brightness + self.regression_b 
+        # Check motion sensor
+        motion_state = self.hass.states.get(self.motion_sensor)
+        if not motion_state:
+            return False
+        
+        from homeassistant.util import dt as dt_util
+        now = dt_util.now()
+        
+        # If motion is currently detected
+        if motion_state.state == "on":
+            self.last_motion_time = now
+            return True
+        
+        # Check if motion was recent enough
+        if self.last_motion_time:
+            time_since_motion = (now - self.last_motion_time).total_seconds() / 60
+            return time_since_motion <= self.keep_on_minutes
+        
+        return False
+    
+    def get_current_brightness(self) -> int:
+        """Get average current brightness of controlled lights."""
+        total_brightness = 0
+        light_count = 0
+        
+        for light_entity in self.light_entities:
+            light_state = self.hass.states.get(light_entity)
+            if light_state and light_state.state == "on":
+                brightness = light_state.attributes.get("brightness", 255)
+                total_brightness += brightness
+                light_count += 1
+        
+        return int(total_brightness / light_count) if light_count > 0 else 255
+    
+    async def async_control_lights(self) -> None:
+        """Main automation logic - control lights based on conditions."""
+        if not self.auto_control_enabled:
+            return
+        
+        should_be_on = self.should_lights_be_on()
+        
+        if not should_be_on:
+            # Turn off lights if they were controlled by automation
+            if self.lights_controlled_by_automation:
+                await self._async_turn_off_lights()
+                self.lights_controlled_by_automation = False
+                self.last_automation_action = "turned_off_no_motion"
+            return
+        
+        # Get current and target lux
+        target_lux = self.get_target_lux()
+        self.current_target_lux = target_lux
+        
+        # Get current lux reading
+        lux_state = self.hass.states.get(self.lux_sensor)
+        if not lux_state or lux_state.state in ("unknown", "unavailable"):
+            return
+        
+        try:
+            current_lux = float(lux_state.state)
+        except ValueError:
+            return
+        
+        deviation = target_lux - current_lux
+        
+        # Check if adjustment is needed
+        if abs(deviation) <= self.deviation_margin:
+            self.last_automation_action = "within_tolerance"
+            return
+        
+        # Calculate target brightness
+        current_brightness = self.get_current_brightness()
+        
+        if self._smart_mode_enabled and self.is_smart_mode_active:
+            # Smart mode: use regression
+            target_brightness = self.calculate_target_brightness(target_lux, current_brightness)
+            mode = "smart"
+        else:
+            # Fallback mode: step adjustment
+            if deviation > 0:
+                target_brightness = min(current_brightness + 30, 255)
+            else:
+                target_brightness = max(current_brightness - 30, 1)
+            mode = "fallback"
+        
+        # Apply brightness change
+        await self._async_set_brightness(target_brightness)
+        self.lights_controlled_by_automation = True
+        
+        # Update predicted lux for sensors
+        self.current_predicted_lux = self.regression_a * target_brightness + self.regression_b
+        
+        # Log action
+        self.last_automation_action = f"{mode}_{current_brightness}→{target_brightness}_for_{target_lux:.1f}lx"
+        
+        _LOGGER.info(
+            "Smart Lux Control [%s]: %s mode, target: %.1flx, current: %.1flx, "
+            "brightness: %d→%d, quality: %.2f",
+            self.room_name, mode, target_lux, current_lux, 
+            current_brightness, target_brightness, self.regression_quality
+        )
+    
+    async def _async_turn_off_lights(self) -> None:
+        """Turn off controlled lights."""
+        for light_entity in self.light_entities:
+            await self.hass.services.async_call(
+                "light", "turn_off",
+                {"entity_id": light_entity},
+                blocking=True
+            )
+    
+    async def _async_set_brightness(self, brightness: int) -> None:
+        """Set brightness for controlled lights."""
+        for light_entity in self.light_entities:
+            await self.hass.services.async_call(
+                "light", "turn_on",
+                {
+                    "entity_id": light_entity,
+                    "brightness": brightness,
+                    "transition": 2
+                },
+                blocking=True
+            )
+    
+    async def _async_start_automation_task(self) -> None:
+        """Start the automation background task."""
+        if self._automation_task and not self._automation_task.done():
+            return
+        
+        _LOGGER.info("Starting automation task for room: %s", self.room_name)
+        self._automation_task = asyncio.create_task(self._async_automation_loop())
+    
+    async def _async_automation_loop(self) -> None:
+        """Background task that runs light control automation."""
+        while True:
+            try:
+                if self.auto_control_enabled:
+                    await self.async_control_lights()
+                
+                # Wait for next check
+                await asyncio.sleep(self.check_interval)
+                
+            except asyncio.CancelledError:
+                _LOGGER.info("Automation task cancelled for room: %s", self.room_name)
+                break
+            except Exception as err:
+                _LOGGER.error(
+                    "Error in automation loop for room %s: %s", 
+                    self.room_name, err
+                )
+                # Wait a bit before retrying
+                await asyncio.sleep(30)
+    
+    def enable_auto_control(self, enabled: bool) -> None:
+        """Enable or disable auto control."""
+        self.auto_control_enabled = enabled
+        
+        if enabled and (not self._automation_task or self._automation_task.done()):
+            # Start task if it's not running
+            asyncio.create_task(self._async_start_automation_task())
+        elif not enabled and self._automation_task and not self._automation_task.done():
+            # Cancel task if it's running
+            self._automation_task.cancel()
+    
+    @property
+    def smart_mode_enabled(self) -> bool:
+        """Get smart mode status."""
+        return self._smart_mode_enabled
+    
+    def set_smart_mode(self, enabled: bool) -> None:
+        """Enable or disable smart mode."""
+        self._smart_mode_enabled = enabled
+    
+    @property 
+    def adaptive_learning_enabled(self) -> bool:
+        """Get adaptive learning status."""
+        return self._adaptive_learning_enabled
+    
+    def set_adaptive_learning(self, enabled: bool) -> None:
+        """Enable or disable adaptive learning."""
+        self._adaptive_learning_enabled = enabled 

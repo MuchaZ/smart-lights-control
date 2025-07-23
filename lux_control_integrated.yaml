@@ -1,0 +1,321 @@
+blueprint:
+  name: Inteligentne Utrzymywanie Luxów z Smart Lux Control
+  description: >
+    Ulepszona wersja sterowania światłem używająca custom component Smart Lux Control
+    dla precyzyjnych obliczeń jasności zamiast ślepego zwiększania/zmniejszania o stały krok.
+
+  domain: automation
+
+  input:
+    room_name:
+      name: Nazwa pomieszczenia (identyczna jak w Smart Lux Control)
+      default: living_room
+      selector:
+        text:
+
+    light_target:
+      name: Lampy
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    motion_sensor:
+      name: Czujnik ruchu
+      selector:
+        entity:
+          domain: binary_sensor
+
+    keep_on_minutes:
+      name: Czas świecenia po ruchu (minuty)
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+
+    home_mode:
+      name: Tryb domu
+      selector:
+        entity:
+          domain: input_select
+
+    # Ustawienia lux dla różnych trybów (bez zmian)
+    lux_normal_sun_day:
+      name: Normal – dzień
+      default: 400
+      selector:
+        number:
+          min: 0
+          max: 1500
+          step: 10
+
+    lux_normal_sun_night:
+      name: Normal – noc
+      default: 150
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 10
+
+    lux_mode_noc:
+      name: Tryb noc
+      default: 10
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+
+    lux_mode_impreza:
+      name: Tryb impreza
+      default: 500
+      selector:
+        number:
+          min: 0
+          max: 1500
+          step: 10
+
+    lux_mode_relaks:
+      name: Tryb relaks
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 10
+
+    lux_mode_film:
+      name: Tryb film
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 10
+
+    lux_mode_sprzatanie:
+      name: Tryb sprzątanie
+      default: 600
+      selector:
+        number:
+          min: 0
+          max: 1500
+          step: 10
+
+    lux_mode_dziecko_spi:
+      name: Tryb dziecko spi
+      default: 8
+      selector:
+        number:
+          min: 0
+          max: 50
+          step: 1
+
+    buffer_minutes:
+      name: Bufor przejścia dzień/noc (minuty)
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 90
+          step: 5
+
+    deviation_margin:
+      name: Tolerancja różnicy (lx)
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "on"
+
+  - platform: time_pattern
+    seconds: "/30"
+
+variables:
+  room_name: !input room_name
+  input_motion_sensor: !input motion_sensor
+  input_home_mode: !input home_mode
+  input_light_target: !input light_target
+  input_keep_on_minutes: !input keep_on_minutes
+
+  input_lux_normal_sun_day: !input lux_normal_sun_day
+  input_lux_normal_sun_night: !input lux_normal_sun_night
+  input_lux_mode_noc: !input lux_mode_noc
+  input_lux_mode_impreza: !input lux_mode_impreza
+  input_lux_mode_relaks: !input lux_mode_relaks
+  input_lux_mode_film: !input lux_mode_film
+  input_lux_mode_sprzatanie: !input lux_mode_sprzatanie
+  input_lux_mode_dziecko_spi: !input lux_mode_dziecko_spi
+  input_buffer_minutes: !input buffer_minutes
+  input_deviation_margin: !input deviation_margin
+
+  # Sensory z Smart Lux Control
+  smart_mode_sensor: "sensor.{{ room_name }}_smart_mode_status"
+  lux_sensor: "sensor.{{ room_name }}_predicted_lux"
+  current_lux: "{{ states('sensor.' + room_name + '_predicted_lux') | float(0) if states('sensor.' + room_name + '_predicted_lux') != 'unknown' else 200 }}"
+
+  current_mode: "{{ states(input_home_mode) | string }}"
+  motion_state: "{{ is_state(input_motion_sensor, 'on') }}"
+  last_motion_ts: "{{ as_timestamp(states[input_motion_sensor].last_changed) }}"
+  now_ts: "{{ now().timestamp() }}"
+  keep_on_seconds: "{{ input_keep_on_minutes | int * 60 }}"
+  recently_active: "{{ (now_ts - last_motion_ts) < keep_on_seconds }}"
+
+  # Kalkulacja dzień/noc (bez zmian)
+  sunrise: "{{ as_timestamp(state_attr('sun.sun', 'next_rising')) - 86400 }}"
+  sunset: "{{ as_timestamp(state_attr('sun.sun', 'next_setting')) }}"
+  buffer: "{{ input_buffer_minutes | float * 60 }}"
+
+  sunrise_ratio: >-
+    {% set start = sunrise %}
+    {% set end = sunrise + buffer %}
+    {% if now_ts < start %} 0
+    {% elif now_ts > end %} 1
+    {% else %} {{ ((now_ts - start) / buffer) }}
+    {% endif %}
+
+  sunset_ratio: >-
+    {% set start = sunset %}
+    {% set end = sunset + buffer %}
+    {% if now_ts < start %} 1
+    {% elif now_ts > end %} 0
+    {% else %} {{ 1 - ((now_ts - start) / buffer) }}
+    {% endif %}
+
+  day_night_blend: >-
+    {% if now_ts < (sunrise + buffer) %}
+      {{ sunrise_ratio }}
+    {% elif now_ts < sunset %}
+      1
+    {% elif now_ts < (sunset + buffer) %}
+      {{ sunset_ratio }}
+    {% else %}
+      0
+    {% endif %}
+
+  # Docelowe lux (bez zmian)
+  target_lux_val: >-
+    {% set m = current_mode %}
+    {% if m == 'noc' %} {{ input_lux_mode_noc }}
+    {% elif m == 'impreza' %} {{ input_lux_mode_impreza }}
+    {% elif m == 'relaks' %} {{ input_lux_mode_relaks }}
+    {% elif m == 'film' %} {{ input_lux_mode_film %}
+    {% elif m == 'sprzatanie' %} {{ input_lux_mode_sprzatanie }}
+    {% elif m == 'dziecko_spi' %} {{ input_lux_mode_dziecko_spi }}
+    {% else %}
+      {{
+        input_lux_normal_sun_night | float
+        + (input_lux_normal_sun_day | float - input_lux_normal_sun_night | float) * day_night_blend
+      }}
+    {% endif %}
+
+  deviation: "{{ target_lux_val | float - current_lux }}"
+
+  # Obecna jasność
+  current_brightness: >
+    {{
+      expand(input_light_target)
+      | map(attribute='attributes.brightness')
+      | select('defined') | list | average(default=255) | int
+    }}
+
+condition:
+  - alias: "Sprawdź, czy był ruch niedawno"
+    condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ motion_state }}"
+      - condition: template
+        value_template: "{{ recently_active }}"
+
+action:
+  - alias: "Inteligentne dostosowanie światła"
+    choose:
+      - alias: "🧠 SMART MODE: Użyj Smart Lux Control"
+        conditions:
+          - condition: state
+            entity_id: "switch.{{ room_name }}_smart_mode"
+            state: "on"
+          - condition: template
+            value_template: "{{ deviation | abs > (input_deviation_margin | float) }}"
+        sequence:
+          # NOWE: Użyj Smart Lux Control do obliczenia dokładnej jasności
+          - service: smart_lux_control.calculate_target_brightness
+            data:
+              room_name: "{{ room_name }}"
+              target_lux: "{{ target_lux_val | round(1) }}"
+              current_brightness: "{{ current_brightness }}"
+            response_variable: smart_result
+
+          - alias: "Ustaw inteligentnie obliczoną jasność"
+            service: light.turn_on
+            target:
+              entity_id: !input light_target
+            data:
+              brightness: "{{ smart_result.brightness | int }}"
+              transition: 2
+
+          - alias: "Loguj smart działanie"
+            service: logbook.log
+            data:
+              name: "🧠 Smart Lux Control"
+              message: >
+                Smart Mode: {{ room_name }} | Docelowe: {{ target_lux_val | round(1) }}lx | 
+                Jasność: {{ current_brightness }}→{{ smart_result.brightness }} |
+                Jakość: {{ states('sensor.' + room_name + '_regression_quality') }}
+
+      - alias: "⚠️ FALLBACK: Stare sterowanie krokowe"
+        conditions:
+          - condition: template
+            value_template: "{{ deviation | abs > (input_deviation_margin | float) }}"
+        sequence:
+          - choose:
+              - alias: "Za ciemno – zwiększ jasność"
+                conditions:
+                  - condition: template
+                    value_template: "{{ deviation > 0 }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input light_target
+                    data:
+                      brightness: "{{ [current_brightness + 30, 255] | min }}"
+
+              - alias: "Za jasno – przyciemnij"
+                conditions:
+                  - condition: template
+                    value_template: "{{ deviation < 0 }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input light_target
+                    data:
+                      brightness: "{{ [current_brightness - 30, 1] | max }}"
+
+          - alias: "Loguj fallback działanie"
+            service: logbook.log
+            data:
+              name: "⚠️ Fallback Control"
+              message: >
+                Fallback Mode: {{ room_name }} | Smart Mode wyłączony lub niedostępny |
+                Docelowe: {{ target_lux_val | round(1) }}lx | Odchylenie: {{ deviation | round(1) }}lx
+
+    default:
+      - alias: "✅ Lux w tolerancji"
+        service: logbook.log
+        data:
+          name: "Lux Control"
+          message: >
+            ✅ OK: {{ room_name }} | {{ current_lux | round(1) }}lx (docelowe: {{ target_lux_val | round(1) }}lx) |
+            Tryb: {% if is_state('switch.' + room_name + '_smart_mode', 'on') %}🧠 Smart{% else %}⚠️ Fallback{% endif %}
+
+mode: single 

@@ -17,14 +17,28 @@ from .const import (
     CONF_LUX_SENSOR,
     CONF_MOTION_SENSOR,
     CONF_HOME_MODE_SELECT,
+    CONF_LUX_NORMAL_DAY,
+    CONF_LUX_NORMAL_NIGHT,
+    CONF_LUX_MODE_NOC,
+    CONF_LUX_MODE_IMPREZA,
+    CONF_LUX_MODE_RELAKS,
+    CONF_LUX_MODE_FILM,
+    CONF_LUX_MODE_SPRZATANIE,
+    CONF_LUX_MODE_DZIECKO_SPI,
+    CONF_KEEP_ON_MINUTES,
+    CONF_BUFFER_MINUTES,
+    CONF_DEVIATION_MARGIN,
+    CONF_CHECK_INTERVAL,
+    CONF_AUTO_CONTROL_ENABLED,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
+# Step 1: Basic Configuration
 STEP_USER_DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_ROOM_NAME): str,
     vol.Required(CONF_LIGHT_ENTITY): selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="light")
+        selector.EntitySelectorConfig(domain="light", multiple=True)
     ),
     vol.Required(CONF_LUX_SENSOR): selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor", device_class="illuminance")
@@ -35,6 +49,27 @@ STEP_USER_DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_HOME_MODE_SELECT): selector.EntitySelector(
         selector.EntitySelectorConfig(domain="input_select")
     ),
+    vol.Optional(CONF_AUTO_CONTROL_ENABLED, default=True): bool,
+})
+
+# Step 2: Lux Settings
+STEP_LUX_DATA_SCHEMA = vol.Schema({
+    vol.Optional(CONF_LUX_NORMAL_DAY, default=400): vol.All(vol.Coerce(int), vol.Range(min=50, max=2000)),
+    vol.Optional(CONF_LUX_NORMAL_NIGHT, default=150): vol.All(vol.Coerce(int), vol.Range(min=10, max=1000)),
+    vol.Optional(CONF_LUX_MODE_NOC, default=10): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+    vol.Optional(CONF_LUX_MODE_IMPREZA, default=500): vol.All(vol.Coerce(int), vol.Range(min=100, max=2000)),
+    vol.Optional(CONF_LUX_MODE_RELAKS, default=120): vol.All(vol.Coerce(int), vol.Range(min=20, max=1000)),
+    vol.Optional(CONF_LUX_MODE_FILM, default=60): vol.All(vol.Coerce(int), vol.Range(min=5, max=500)),
+    vol.Optional(CONF_LUX_MODE_SPRZATANIE, default=600): vol.All(vol.Coerce(int), vol.Range(min=200, max=2000)),
+    vol.Optional(CONF_LUX_MODE_DZIECKO_SPI, default=8): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+})
+
+# Step 3: Timing Settings  
+STEP_TIMING_DATA_SCHEMA = vol.Schema({
+    vol.Optional(CONF_KEEP_ON_MINUTES, default=5): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+    vol.Optional(CONF_BUFFER_MINUTES, default=30): vol.All(vol.Coerce(int), vol.Range(min=0, max=90)),
+    vol.Optional(CONF_DEVIATION_MARGIN, default=15): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
+    vol.Optional(CONF_CHECK_INTERVAL, default=30): vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
 })
 
 
@@ -42,6 +77,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Smart Lux Control."""
 
     VERSION = 1
+
+    def __init__(self):
+        """Initialize."""
+        self.data = {}
 
     async def async_step_user(
         self, user_input: Optional[Dict[str, Any]] = None
@@ -51,33 +90,82 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # Validate the input
-            errors = await self._async_validate_input(user_input)
+            errors = await self._async_validate_basic_input(user_input)
             
             if not errors:
-                # Create entry
-                return self.async_create_entry(
-                    title=f"Smart Lux Control - {user_input[CONF_ROOM_NAME]}",
-                    data=user_input,
-                )
+                self.data.update(user_input)
+                return await self.async_step_lux_settings()
 
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
+            description_placeholders={
+                "step": "1/3",
+                "step_name": "Podstawowa konfiguracja"
+            }
         )
 
-    async def _async_validate_input(self, user_input: Dict[str, Any]) -> Dict[str, str]:
-        """Validate the user input."""
+    async def async_step_lux_settings(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle the lux settings step."""
+        if user_input is not None:
+            self.data.update(user_input)
+            return await self.async_step_timing_settings()
+
+        return self.async_show_form(
+            step_id="lux_settings",
+            data_schema=STEP_LUX_DATA_SCHEMA,
+            description_placeholders={
+                "step": "2/3",
+                "step_name": "Ustawienia docelowych wartości lux",
+                "room_name": self.data[CONF_ROOM_NAME]
+            }
+        )
+
+    async def async_step_timing_settings(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        """Handle the timing settings step."""
+        if user_input is not None:
+            self.data.update(user_input)
+            
+            # Create entry
+            return self.async_create_entry(
+                title=f"Smart Lux Control - {self.data[CONF_ROOM_NAME]}",
+                data=self.data,
+            )
+
+        return self.async_show_form(
+            step_id="timing_settings",
+            data_schema=STEP_TIMING_DATA_SCHEMA,
+            description_placeholders={
+                "step": "3/3",
+                "step_name": "Ustawienia czasowe i tolerancji",
+                "room_name": self.data[CONF_ROOM_NAME]
+            }
+        )
+
+    async def _async_validate_basic_input(self, user_input: Dict[str, Any]) -> Dict[str, str]:
+        """Validate the basic user input."""
         errors = {}
 
         # Check if entities exist
-        light_entity = user_input[CONF_LIGHT_ENTITY]
+        light_entities = user_input[CONF_LIGHT_ENTITY]
         lux_sensor = user_input[CONF_LUX_SENSOR]
         motion_sensor = user_input[CONF_MOTION_SENSOR]
         home_mode_select = user_input.get(CONF_HOME_MODE_SELECT)
 
-        if not self.hass.states.get(light_entity):
-            errors[CONF_LIGHT_ENTITY] = "entity_not_found"
+        # Validate light entities
+        if isinstance(light_entities, list):
+            for light_entity in light_entities:
+                if not self.hass.states.get(light_entity):
+                    errors[CONF_LIGHT_ENTITY] = "entity_not_found"
+                    break
+        else:
+            if not self.hass.states.get(light_entities):
+                errors[CONF_LIGHT_ENTITY] = "entity_not_found"
 
         if not self.hass.states.get(lux_sensor):
             errors[CONF_LUX_SENSOR] = "entity_not_found"
@@ -130,13 +218,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 default=coordinator.max_brightness_change if coordinator else 50,
             ): vol.All(vol.Coerce(int), vol.Range(min=10, max=100)),
             vol.Optional(
-                "deviation_margin",
-                default=coordinator.deviation_margin if coordinator else 15,
-            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
-            vol.Optional(
                 "learning_rate",
                 default=coordinator.learning_rate if coordinator else 0.1,
             ): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+            vol.Optional(
+                CONF_AUTO_CONTROL_ENABLED,
+                default=self.config_entry.data.get(CONF_AUTO_CONTROL_ENABLED, True),
+            ): bool,
         })
 
         return self.async_show_form(step_id="init", data_schema=options_schema) 

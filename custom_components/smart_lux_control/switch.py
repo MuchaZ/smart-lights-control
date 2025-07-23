@@ -25,6 +25,7 @@ async def async_setup_entry(
     entities = [
         SmartModeSwitch(coordinator),
         AdaptiveLearningSwitch(coordinator),
+        AutoControlSwitch(coordinator),
     ]
     
     async_add_entities(entities)
@@ -64,10 +65,7 @@ class SmartModeSwitch(SmartLuxBaseSwitch):
     @property
     def is_on(self) -> bool:
         """Return if smart mode is enabled."""
-        return (
-            self._coordinator.regression_quality >= self._coordinator.min_regression_quality
-            and self._coordinator.sample_count >= 5
-        )
+        return self._coordinator.smart_mode_enabled
 
     @property
     def available(self) -> bool:
@@ -75,14 +73,13 @@ class SmartModeSwitch(SmartLuxBaseSwitch):
         return self._coordinator.sample_count >= 5
 
     async def async_turn_on(self, **kwargs) -> None:
-        """Turn on smart mode by lowering quality threshold."""
-        if self._coordinator.sample_count >= 5:
-            self._coordinator.min_regression_quality = max(0.3, self._coordinator.regression_quality - 0.1)
-            await self._coordinator._async_save_data()
+        """Turn on smart mode."""
+        self._coordinator.set_smart_mode(True)
+        await self._coordinator._async_save_data()
 
     async def async_turn_off(self, **kwargs) -> None:
-        """Turn off smart mode by raising quality threshold."""
-        self._coordinator.min_regression_quality = 0.9  # Very high threshold
+        """Turn off smart mode."""
+        self._coordinator.set_smart_mode(False)
         await self._coordinator._async_save_data()
 
     @property
@@ -107,18 +104,18 @@ class AdaptiveLearningSwitch(SmartLuxBaseSwitch):
     @property
     def is_on(self) -> bool:
         """Return if adaptive learning is enabled."""
-        return self._adaptive_learning_enabled
+        return self._coordinator.adaptive_learning_enabled
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on adaptive learning."""
-        self._adaptive_learning_enabled = True
+        self._coordinator.set_adaptive_learning(True)
         # Run adaptive learning immediately
         if self._coordinator.sample_count >= 15:
             await self._coordinator.async_adaptive_learning()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn off adaptive learning."""
-        self._adaptive_learning_enabled = False
+        self._coordinator.set_adaptive_learning(False)
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
@@ -126,4 +123,39 @@ class AdaptiveLearningSwitch(SmartLuxBaseSwitch):
         return {
             "learning_rate": self._coordinator.learning_rate,
             "samples_needed": max(0, 15 - self._coordinator.sample_count),
+        }
+
+
+class AutoControlSwitch(SmartLuxBaseSwitch):
+    """Switch to enable/disable automatic light control."""
+
+    def __init__(self, coordinator) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator, "auto_control", "Auto Control")
+        self._attr_icon = "mdi:home-automation"
+
+    @property
+    def is_on(self) -> bool:
+        """Return if auto control is enabled."""
+        return self._coordinator.auto_control_enabled
+
+    async def async_turn_on(self, **kwargs) -> None:
+        """Turn on auto control."""
+        self._coordinator.enable_auto_control(True)
+        await self._coordinator._async_save_data()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        """Turn off auto control."""
+        self._coordinator.enable_auto_control(False)
+        await self._coordinator._async_save_data()
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "check_interval": self._coordinator.check_interval,
+            "keep_on_minutes": self._coordinator.keep_on_minutes,
+            "last_action": self._coordinator.last_automation_action,
+            "motion_detected": self._coordinator.should_lights_be_on(),
+            "target_lux": self._coordinator.current_target_lux,
         } 
