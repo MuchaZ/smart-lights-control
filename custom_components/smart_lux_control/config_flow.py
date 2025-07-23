@@ -195,9 +195,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
         """Show options menu."""
-        return self.async_show_menu(
+        if user_input is not None:
+            selection = user_input.get("menu_selection")
+            if selection == "lux_settings":
+                return await self.async_step_lux_settings()
+            elif selection == "timing_settings":
+                return await self.async_step_timing_settings()
+            elif selection == "advanced_settings":
+                return await self.async_step_advanced_settings()
+        
+        # Show menu as dropdown selection
+        menu_schema = vol.Schema({
+            vol.Required("menu_selection"): vol.In({
+                "lux_settings": "🌟 Poziomy docelowego oświetlenia", 
+                "timing_settings": "⏰ Ustawienia czasowe i automatyki",
+                "advanced_settings": "🔧 Zaawansowane opcje regresji"
+            })
+        })
+        
+        return self.async_show_form(
             step_id="init",
-            menu_options=["lux_settings", "timing_settings", "advanced_settings"],
+            data_schema=menu_schema
         )
 
     async def async_step_lux_settings(
@@ -212,9 +230,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
-            # Reload the integration to apply new settings
+            # Reload the integration to apply new lux settings
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            return self.async_create_entry(title="", data={})
+            return self.async_create_entry(
+                title="Ustawienia zapisane", 
+                data={"reload_required": True}
+            )
 
         # Current values from config entry
         lux_schema = vol.Schema({
@@ -270,7 +291,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
-            return self.async_create_entry(title="", data={})
+            # Reload the integration to apply new timing settings
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_create_entry(
+                title="Ustawienia zapisane",
+                data={"reload_required": True}
+            )
 
         timing_schema = vol.Schema({
             vol.Optional(

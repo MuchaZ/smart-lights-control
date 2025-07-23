@@ -72,10 +72,8 @@
       "init": {
         "title": "Opcje Smart Lux Control",
         "description": "Wybierz kategorię ustawień do edycji",
-        "menu_options": {
-          "lux_settings": "🌟 Poziomy docelowego oświetlenia",
-          "timing_settings": "⏰ Ustawienia czasowe i automatyki", 
-          "advanced_settings": "🔧 Zaawansowane opcje regresji"
+        "data": {
+          "menu_selection": "Kategoria ustawień"
         }
       },
       "lux_settings": {
